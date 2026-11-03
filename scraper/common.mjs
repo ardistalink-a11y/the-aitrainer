@@ -14,7 +14,7 @@ export function classifyIndonesia(raw) {
   if (/\bindonesia\b/.test(t)) return 'indonesia';
   if (/(worldwide|global|anywhere|all countries)/.test(t)) return 'worldwide';
   if (/\+\s*\d+\s*more/.test(t)) return 'unknown'; // daftar terpotong
-  if (t === 'remote') return 'unknown';
+  if (t.split(/[\/;|]/).some((s) => s.trim() === 'remote')) return 'unknown';
   return 'excluded';
 }
 
@@ -37,8 +37,13 @@ export async function savePlatform(platform, items) {
     };
   });
 
-  const up = await db.from('projects').upsert(rows, { onConflict: 'source_url' });
-  if (up.error) throw up.error;
+  // Kirim bertahap supaya aman untuk ratusan baris
+  for (let i = 0; i < rows.length; i += 200) {
+    const up = await db
+      .from('projects')
+      .upsert(rows.slice(i, i + 200), { onConflict: 'source_url' });
+    if (up.error) throw up.error;
+  }
 
   const closed = await db
     .from('projects')
