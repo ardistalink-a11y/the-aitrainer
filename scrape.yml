@@ -1,0 +1,31 @@
+name: Scrape proyek
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # tiap hari 06:00 WIB
+  workflow_dispatch:        # tombol "Run workflow" untuk tes manual
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: scraper
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Lever (Welo, Appen, RWS, TSMG)
+        run: node lever.mjs
+      - name: Install browser
+        if: always()
+        run: npx playwright install --with-deps chromium
+      - name: Outlier
+        if: always()
+        run: node outlier.mjs
