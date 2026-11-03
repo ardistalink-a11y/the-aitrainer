@@ -7,6 +7,9 @@ create table if not exists projects (
   country text,
   pay text,
   status text not null default 'open',
+  indonesia_status text not null default 'unknown',
+  work_mode text,
+  raw_location text,
   source_url text not null unique,
   last_seen timestamptz default now(),
   created_at timestamptz default now()
@@ -18,8 +21,10 @@ drop policy if exists "public read" on projects;
 create policy "public read" on projects
   for select using (true);
 
-insert into projects (project_name, platform, task_type, language, country, source_url)
-values
-  ('Contoh: Evaluasi Respons AI (Bahasa Indonesia)', 'Contoh Platform A', 'Rating', 'Indonesian', 'Indonesia', 'https://example.com/a1'),
-  ('Contoh: Transkripsi Audio', 'Contoh Platform B', 'Transkripsi', 'Indonesian', 'Worldwide', 'https://example.com/b1')
-on conflict (source_url) do nothing;
+create index if not exists projects_indonesia_status_idx
+  on projects (indonesia_status, status);
+
+-- Daftar platform untuk dropdown filter di situs
+create or replace view platform_list with (security_invoker = true) as
+  select distinct platform from projects;
+grant select on platform_list to anon, authenticated;
