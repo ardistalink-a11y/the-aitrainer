@@ -85,3 +85,20 @@ input[type='search'], select {
 .notice { margin: 24px 0; padding: 16px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
 .foot { padding-top: 40px; padding-bottom: 48px; font-size: 0.85rem; color: var(--muted); }
 .foot p { max-width: 60ch; }
+
+.auth { margin: 4px 0 14px; font-size: 0.9rem; color: var(--muted); }
+.auth form { display: flex; flex-wrap: wrap; gap: 8px; }
+.auth input {
+  flex: 1 1 180px; min-width: 0; font: inherit; color: inherit; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+.btn {
+  font: inherit; color: inherit; cursor: pointer; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px;
+}
+.btn:disabled { opacity: 0.6; cursor: default; }
+.link {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--accent);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+}
+.msg { width: 100%; margin: 4px 0 0; color: var(--process); }

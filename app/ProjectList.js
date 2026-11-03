@@ -36,18 +36,73 @@ export default function ProjectList() {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authMsg, setAuthMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+
   const marksRef = useRef({});
   const reqId = useRef(0);
+  const userId = user?.id ?? null;
 
-  // Penanda lamaran disimpan di browser ini (localStorage)
+  // Sesi login
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-      marksRef.current = saved;
-      setMarks(saved);
-    } catch {}
-    setReady(true);
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthChecked(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => data.subscription.unsubscribe();
   }, []);
+
+  // Muat penanda lamaran: dari akun kalau login, dari browser kalau belum
+  useEffect(() => {
+    if (!authChecked || !supabase) return;
+    let cancelled = false;
+    (async () => {
+      setReady(false);
+      let local = {};
+      try {
+        local = JSON.parse(localStorage.getItem(KEY) || '{}');
+      } catch {}
+      let map = local;
+      if (userId) {
+        const entries = Object.entries(local);
+        if (entries.length) {
+          // pindahkan penanda lama di browser ini ke akun
+          const up = await supabase.from('user_marks').upsert(
+            entries.map(([project_id, mark]) => ({ user_id: userId, project_id, mark })),
+            { onConflict: 'user_id,project_id' }
+          );
+          if (!up.error) {
+            try {
+              localStorage.removeItem(KEY);
+            } catch {}
+          }
+        }
+        const { data } = await supabase.from('user_marks').select('project_id, mark');
+        map = {};
+        (data || []).forEach((r) => {
+          map[r.project_id] = r.mark;
+        });
+      }
+      if (cancelled) return;
+      marksRef.current = map;
+      setMarks(map);
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authChecked, userId]);
 
   useEffect(() => {
     const t = setTimeout(() => setTerm(q.trim().replace(/[,()%*]/g, ' ').trim()), 300);
@@ -119,15 +174,48 @@ export default function ProjectList() {
     if (ready) run(0);
   }, [ready, term, platform, scope, mine, showClosed]);
 
-  function setMark(id, value) {
+  async function setMark(id, value) {
     const next = { ...marksRef.current };
     if (value === 'none') delete next[id];
     else next[id] = value;
     marksRef.current = next;
     setMarks(next);
-    try {
-      localStorage.setItem(KEY, JSON.stringify(next));
-    } catch {}
+    setSyncMsg('');
+
+    if (userId) {
+      const res =
+        value === 'none'
+          ? await supabase.from('user_marks').delete().eq('project_id', id)
+          : await supabase
+              .from('user_marks')
+              .upsert({ user_id: userId, project_id: id, mark: value }, { onConflict: 'user_id,project_id' });
+      if (res.error) setSyncMsg('Status belum tersimpan: ' + res.error.message);
+    } else {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(next));
+      } catch {}
+    }
+  }
+
+  async function submitAuth(mode) {
+    setBusy(true);
+    setAuthMsg('');
+    const creds = { email: email.trim(), password };
+    const { data, error: err } =
+      mode === 'signup'
+        ? await supabase.auth.signUp(creds)
+        : await supabase.auth.signInWithPassword(creds);
+    setBusy(false);
+    if (err) {
+      setAuthMsg(err.message);
+      return;
+    }
+    if (mode === 'signup' && !data.session) {
+      setAuthMsg('Akun dibuat. Cek email untuk konfirmasi, lalu masuk.');
+      return;
+    }
+    setShowAuth(false);
+    setPassword('');
   }
 
   if (!supabase) {
@@ -136,6 +224,57 @@ export default function ProjectList() {
 
   return (
     <section>
+      <div className="auth">
+        {user ? (
+          <span>
+            Masuk sebagai {user.email}.{' '}
+            <button className="link" onClick={() => supabase.auth.signOut()}>
+              Keluar
+            </button>
+          </span>
+        ) : showAuth ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitAuth('signin');
+            }}
+          >
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              autoComplete="email"
+              required
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password (min. 6 karakter)"
+              autoComplete="current-password"
+              minLength={6}
+              required
+            />
+            <button className="btn" type="submit" disabled={busy}>
+              Masuk
+            </button>
+            <button className="btn" type="button" disabled={busy} onClick={() => submitAuth('signup')}>
+              Daftar
+            </button>
+            {authMsg ? <p className="msg">{authMsg}</p> : null}
+          </form>
+        ) : (
+          <span>
+            Status lamaran tersimpan di browser ini saja.{' '}
+            <button className="link" onClick={() => setShowAuth(true)}>
+              Masuk agar tersinkron antar perangkat
+            </button>
+          </span>
+        )}
+        {syncMsg ? <p className="msg">{syncMsg}</p> : null}
+      </div>
+
       <div className="bar">
         <input
           type="search"
