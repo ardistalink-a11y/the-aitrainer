@@ -1,24 +1,6 @@
-import { supabase } from '../lib/supabase';
 import ProjectList from './ProjectList';
 
-export const revalidate = 300; // data diperbarui tiap 5 menit
-
-export default async function Home() {
-  let projects = [];
-  let error = null;
-
-  if (!supabase) {
-    error = 'Variabel environment Supabase belum diisi.';
-  } else {
-    const res = await supabase
-      .from('projects')
-      .select('*')
-      .order('last_seen', { ascending: false })
-      .limit(2000);
-    if (res.error) error = res.error.message;
-    else projects = res.data || [];
-  }
-
+export default function Home() {
   const reportUrl = process.env.NEXT_PUBLIC_REPORT_URL;
 
   return (
@@ -34,11 +16,7 @@ export default async function Home() {
       </header>
 
       <main>
-        {error ? (
-          <p className="notice">Data belum bisa dimuat: {error}</p>
-        ) : (
-          <ProjectList projects={projects} />
-        )}
+        <ProjectList />
       </main>
 
       <footer className="foot">
