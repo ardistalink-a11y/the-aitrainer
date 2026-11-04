@@ -41,3 +41,7 @@ jobs:
       - name: Outlier
         if: always()
         run: node outlier.mjs
+      - name: Backfill country codes
+        if: always()
+        continue-on-error: true
+        run: node backfill-countries.mjs
