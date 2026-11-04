@@ -1,18 +1,10 @@
 import { chromium } from 'playwright';
 import countries from 'i18n-iso-countries';
-import { extractCountryCodes, savePlatform, sleep } from './common.mjs';
-
-const MICRO1_RESTRICTED = new Set([
-  'AF', 'BY', 'CN', 'CU', 'CD', 'HK', 'IR', 'IQ', 'LY', 'MO', 'MM', 'KP', 'RU',
-  'SO', 'SS', 'SD', 'SY', 'VE', 'UA', 'YE', 'ET',
-]);
-const MICRO1_COUNTRIES = Object.keys(countries.getNames('en')).filter((code) => !MICRO1_RESTRICTED.has(code));
+import { clean, extractCountryCodes, savePlatform, sleep } from './common.mjs';
 
 const SOURCES = [
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
-  { platform: 'RemoExperts', url: 'https://www.rex.zone/open-opportunities', paths: /\/(open-opportunities|opportunities|jobs?|projects?)\/[^/]+/i },
   { platform: 'Productive Playhouse', url: 'https://productiveplayhouse.applytojob.com/apply/', paths: /\/apply\/[a-z0-9]{6,}(?:\/[^/]*)?$/i },
-  { platform: 'iMerit', url: 'https://imerit.ai/careers-listing/', paths: /\/careers-listing\/?$/i, queryParam: 'job' },
   { platform: 'Meridial', url: 'https://www.meridial.ai/projects', paths: /\/(projects|opportunities|jobs?)\/[^/]+/i },
 ];
 
@@ -100,7 +92,7 @@ async function scrapeSource(page, source) {
 
 function toItem(job, source) {
   const detectedCodes = extractCountryCodes(job.text);
-  const codes = source.platform === 'micro1' ? MICRO1_COUNTRIES : detectedCodes;
+  const codes = detectedCodes;
   const locations = codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
   if (!locations.length && /\bremote\b/i.test(job.text)) locations.push('Remote');
   const pay = job.text.match(/(?:[$€£]\s?[\d,.]+(?:\s?[-–]\s?[$€£]?\s?[\d,.]+)?\s*(?:\/\s*(?:hr|hour|task|project))?)/i)?.[0] ?? null;
@@ -115,10 +107,99 @@ function toItem(job, source) {
   };
 }
 
+async function scrapeImerit(page) {
+  const url = 'https://imerit.ai/careers-listing/';
+  const items = [];
+  let buttonCount = 0;
+  let failedButtons = 0;
+  for (let index = 0; index < 100; index++) {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(1200);
+    const buttons = page.getByText(/view role/i);
+    buttonCount = await buttons.count();
+    if (index >= buttonCount) break;
+    const button = buttons.nth(index);
+    const card = await button.evaluate((element) => {
+      let current = element;
+      let best = element;
+      let bestTitle = '';
+      let bestText = '';
+      let href = element.closest('a')?.href || '';
+      let id = '';
+      for (let level = 0; level < 9 && current; level++, current = current.parentElement) {
+        const heading = current.querySelector('h1,h2,h3,h4');
+        const text = (current.innerText || '').trim();
+        if (!bestTitle && heading && text.length > 30 && text.length < 6000) {
+          best = current;
+          bestTitle = (heading.innerText || '').trim();
+          bestText = text;
+        }
+        if (!href) href = current.querySelector('a[href]')?.href || '';
+        const attrs = [current.id, current.getAttribute('data-job-id'), current.getAttribute('data-id'), current.getAttribute('data-job')].filter(Boolean).join(' ');
+        const code = attrs.match(/\b[A-Z]{2,8}-\d{2,8}\b/i) || text.match(/\b[A-Z]{2,8}-\d{2,8}\b/i);
+        if (!id && code) id = code[0];
+      }
+      return { title: bestTitle, text: bestText || (best.innerText || '').trim(), href, id };
+    });
+    const before = page.url();
+    try {
+      await button.click({ timeout: 5000 });
+      await page.waitForTimeout(500);
+    } catch {
+      failedButtons++;
+      continue;
+    }
+    const currentUrl = new URL(page.url());
+    let sourceUrl = currentUrl.searchParams.has('job') ? currentUrl.href : '';
+    if (!sourceUrl && card.href) {
+      const candidate = new URL(card.href, url);
+      if (candidate.searchParams.has('job')) sourceUrl = candidate.href;
+    }
+    if (!sourceUrl && card.id) sourceUrl = url + '?job=' + encodeURIComponent(card.id);
+    const detailText = (await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    const detailTitle = await page.locator('h1,h2').first().innerText().catch(() => '');
+    const projectName = [card.title, detailTitle]
+      .map(clean)
+      .find((title) => title.length > 5 && !/join our global team|careers?|open roles|featured role/i.test(title)) || '';
+    const location = detailText.match(/📍\s*([^⏱📅💰🌐]{2,100})/u)?.[1]
+      || detailText.match(/Location\s*[:：]\s*([^\n]{2,100})/i)?.[1]
+      || card.text.match(/📍\s*([^⏱📅💰🌐]{2,100})/u)?.[1];
+    const rawLocation = clean(location) || (/\bremote\b/i.test(detailText + ' ' + card.text) ? 'Remote' : null);
+    const pay = detailText.match(/(?:USD|EUR|GBP|INR|BDT)?\s*\$?\s*[\d,.]+\s*(?:[-–]\s*(?:USD|EUR|GBP|INR|BDT)?\s*\$?\s*[\d,.]+)?\s*\/\s*(?:hour|hr|month|task)/i)?.[0] || null;
+    const jobId = currentUrl.searchParams.get('job');
+    if (sourceUrl && projectName && jobId && page.url() !== before) {
+      const codes = extractCountryCodes(rawLocation);
+      items.push({
+        project_name: projectName,
+        task_type: null,
+        country: rawLocation,
+        raw_location: rawLocation,
+        country_codes: codes,
+        pay: clean(pay) || null,
+        source_url: sourceUrl,
+      });
+    } else {
+      failedButtons++;
+    }
+  }
+  if (failedButtons) {
+    throw new Error(failedButtons + ' dari ' + buttonCount + ' kartu gagal dibaca; data iMerit lama dipertahankan');
+  }
+  if (!items.length) throw new Error('Klik View role tidak menghasilkan URL detail dengan parameter job');
+  await savePlatform('iMerit', items);
+  console.log('iMerit: ' + items.length + ' listing disimpan dari ' + buttonCount + ' kartu');
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage();
 const failed = [];
 try {
+  try {
+    await scrapeImerit(page);
+  } catch (error) {
+    console.error('iMerit GAGAL:', error.message);
+    failed.push('iMerit');
+  }
   for (const source of SOURCES) {
     try {
       const jobs = await scrapeSource(page, source);

@@ -72,16 +72,18 @@ async function scrapeMicro1() {
           .replace(/\\n/g, '\n');
         if (!title || /not found|no longer available|no longer accepting applications|position has been filled/i.test(text)) return null;
         const location = text.match(/(?:Role Location|Location):\s*([^\n<]{1,160})/i)?.[1];
-        const rawLocation = clean(location) || 'Remote';
+        const rawLocation = clean(location) || null;
         const pay = clean(text.match(/(?:Pay|Pay rate|Compensation):\s*([^\n<]{1,100})/i)?.[1]) || null;
         return {
           project_name: title,
           task_type: null,
           country: rawLocation,
           raw_location: rawLocation,
-          country_codes: /remote|worldwide|global|anywhere/i.test(rawLocation)
-            ? MICRO1_COUNTRIES
-            : (extractCountryCodes(rawLocation).length ? extractCountryCodes(rawLocation) : MICRO1_COUNTRIES),
+          country_codes: !rawLocation
+            ? []
+            : (/remote|worldwide|global|anywhere/i.test(rawLocation)
+              ? MICRO1_COUNTRIES
+              : extractCountryCodes(rawLocation)),
           pay,
           source_url: sourceUrl,
         };
@@ -175,6 +177,62 @@ async function scrapeCactus() {
   console.log('CACTUS: ' + items.length + ' listing disimpan');
 }
 
+async function scrapeRex() {
+  const payload = await getJson('https://www.rex.zone/open-opportunities/_payload.json');
+  const cache = new Map();
+  const at = (index) => {
+    if (typeof index !== 'number') return index;
+    if (index < 0) return undefined;
+    if (cache.has(index)) return cache.get(index);
+    const node = payload[index];
+    if (Array.isArray(node)) {
+      if (['ShallowReactive', 'Reactive', 'Ref', 'ShallowRef', 'Computed', 'Readonly'].includes(node[0])) {
+        const value = at(node[1]);
+        cache.set(index, value);
+        return value;
+      }
+      const value = [];
+      cache.set(index, value);
+      for (const reference of node) value.push(at(reference));
+      return value;
+    }
+    if (node && typeof node === 'object') {
+      const value = {};
+      cache.set(index, value);
+      for (const [key, reference] of Object.entries(node)) value[key] = at(reference);
+      return value;
+    }
+    return node;
+  };
+
+  const state = at(0)?.data;
+  const jobs = state?.['open-opportunities'];
+  if (!Array.isArray(jobs) || !jobs.length) throw new Error('Payload tidak berisi peluang aktif');
+  const allCountryCodes = Object.keys(countries.getNames('en'));
+  const items = jobs.map((job) => {
+    const eligibleCountries = Array.isArray(job.countries) ? job.countries.map(clean).filter(Boolean) : [];
+    const worldwide = eligibleCountries.some((country) => country.toUpperCase() === 'ALL');
+    const countryNames = eligibleCountries.filter((country) => country.toUpperCase() !== 'ALL');
+    const rawLocation = worldwide ? 'Worldwide' : countryNames.join(' / ') || (/\bremote\b/i.test(job.jobDescription || '') ? 'Remote' : null);
+    const countryCodes = worldwide
+      ? allCountryCodes
+      : [...new Set(countryNames.flatMap((country) => extractCountryCodes(country)))];
+    return {
+      project_name: clean(job.jobTitle),
+      task_type: Array.isArray(job.jobCategory) ? job.jobCategory.join(', ') : clean(job.jobCategory) || null,
+      country: rawLocation,
+      raw_location: rawLocation,
+      country_codes: countryCodes,
+      indonesia_status: worldwide ? 'worldwide' : undefined,
+      pay: clean(job.compensation) || null,
+      source_url: 'https://www.rex.zone/open-opportunities/detail?jobId=' + encodeURIComponent(job.jobId),
+    };
+  }).filter((item) => item.project_name && item.source_url);
+  if (!items.length) throw new Error('Payload REX tidak menghasilkan listing');
+  await savePlatform('RemoExperts', items);
+  console.log('RemoExperts: ' + items.length + ' listing disimpan dari payload publik');
+}
+
 async function run(platform, scrape) {
   try {
     await scrape();
@@ -184,9 +242,10 @@ async function run(platform, scrape) {
 }
 
 await run('micro1', scrapeMicro1);
+await run('RemoExperts', scrapeRex);
 await run('SME Careers', scrapeSme);
 await run('CACTUS', scrapeCactus);
 
 if (process.env.GITHUB_STEP_SUMMARY) {
-  await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1, SME Careers, and CACTUS are fetched from their public sitemap or JSON job endpoints. Check this step’s warnings for any source that did not refresh.\n');
+  await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1 and REX are fetched from public sitemaps or page payloads; SME Careers and CACTUS are fetched from public JSON job endpoints. Check this step’s warnings for any source that did not refresh.\n');
 }
