@@ -2,6 +2,12 @@ import { chromium } from 'playwright';
 import countries from 'i18n-iso-countries';
 import { extractCountryCodes, savePlatform, sleep } from './common.mjs';
 
+const MICRO1_RESTRICTED = new Set([
+  'AF', 'BY', 'CN', 'CU', 'CD', 'HK', 'IR', 'IQ', 'LY', 'MO', 'MM', 'KP', 'RU',
+  'SO', 'SS', 'SD', 'SY', 'VE', 'UA', 'YE', 'ET',
+]);
+const MICRO1_COUNTRIES = Object.keys(countries.getNames('en')).filter((code) => !MICRO1_RESTRICTED.has(code));
+
 const SOURCES = [
   { platform: 'micro1', url: 'https://www.micro1.ai/experts/opportunities', paths: /\/(opportunities|jobs?|roles?)\/[^/]+/i },
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
@@ -45,7 +51,7 @@ async function collectPage(page, source) {
           }
           chosen = node;
         }
-        const card = chosen.closest('article,li,[data-job-id],[class*="job-card"],[class*="job-result"],[class*="role-card"],[class*="opportunity-card"]') || chosen;
+        const card = chosen.closest('article,li,[data-job-id],[class*="job-card"],[class*="job-result"],[class*="role-card"],[class*="opportunity-card"],[class*="position-card"]') || chosen;
         const text = (card.innerText || '').trim().replace(/\s+/g, ' ');
         const heading = card.querySelector('h1,h2,h3,h4,[class*="title"]');
         const title = (heading?.innerText || linkText).trim().replace(/\s+/g, ' ');
@@ -93,8 +99,9 @@ async function scrapeSource(page, source) {
   return [...all.values()];
 }
 
-function toItem(job) {
-  const codes = extractCountryCodes(job.text);
+function toItem(job, source) {
+  const detectedCodes = extractCountryCodes(job.text);
+  const codes = source.platform === 'micro1' ? MICRO1_COUNTRIES : detectedCodes;
   const locations = codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
   if (!locations.length && /\bremote\b/i.test(job.text)) locations.push('Remote');
   const pay = job.text.match(/(?:[$€£]\s?[\d,.]+(?:\s?[-–]\s?[$€£]?\s?[\d,.]+)?\s*(?:\/\s*(?:hr|hour|task|project))?)/i)?.[0] ?? null;
@@ -116,7 +123,7 @@ try {
   for (const source of SOURCES) {
     try {
       const jobs = await scrapeSource(page, source);
-      const items = jobs.map(toItem).filter((item) => item.project_name && item.source_url);
+      const items = jobs.map((job) => toItem(job, source)).filter((item) => item.project_name && item.source_url);
       if (!items.length) throw new Error('Tidak ada listing yang cocok dengan struktur halaman');
       await savePlatform(source.platform, items);
       console.log(source.platform + ': ' + items.length + ' listing ditemukan');
