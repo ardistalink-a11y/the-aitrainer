@@ -17,3 +17,4 @@ Push ke GitHub, import repo di Vercel, isi environment variable yang sama, klik 
 
 - Jangan pernah memakai `service_role` key di situs ini. Key itu hanya untuk scraper.
 - Data di situs diperbarui tiap 5 menit (`revalidate` di `app/page.js`).
+- Resolusi kota menggunakan basis data `@tansuasici/country-state-city`; data geografisnya berasal dari [Countries States Cities Database](https://github.com/dr5hn/countries-states-cities-database) dan berlisensi ODbL.
