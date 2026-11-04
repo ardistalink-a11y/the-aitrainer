@@ -13,7 +13,7 @@ const SOURCES = [
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
   { platform: 'RemoExperts', url: 'https://www.rex.zone/open-opportunities', paths: /\/(open-opportunities|opportunities|jobs?|projects?)\/[^/]+/i },
   { platform: 'Productive Playhouse', url: 'https://productiveplayhouse.applytojob.com/apply/', paths: /\/apply\/[a-z0-9]{6,}(?:\/[^/]*)?$/i },
-  { platform: 'iMerit', url: 'https://imerit.ai/careers-listing/', paths: /\/(careers|jobs?|opportunities)\/[^/]+/i },
+  { platform: 'iMerit', url: 'https://imerit.ai/careers-listing/', paths: /\/careers-listing\/?$/i, queryParam: 'job' },
   { platform: 'Meridial', url: 'https://www.meridial.ai/projects', paths: /\/(projects|opportunities|jobs?)\/[^/]+/i },
   { platform: 'SME Careers', url: 'https://sme.careers/jobs/', paths: /\/(jobs?|opportunities)\/[^/]+/i },
   { platform: 'CACTUS', url: 'https://jobs.cactusglobal.com/jobs', paths: /\/(jobs?|job)\/[^/]+/i, pages: 20 },
@@ -24,7 +24,7 @@ function isCandidate(href, title, source) {
   if (/^(apply|apply now|details|read more|learn more|view role|view job)$/i.test(title.trim())) return false;
   try {
     const url = new URL(href);
-    return /^https?:$/.test(url.protocol) && source.paths.test(url.pathname);
+    return /^https?:$/.test(url.protocol) && source.paths.test(url.pathname) && (!source.queryParam || url.searchParams.has(source.queryParam));
   } catch {
     return false;
   }
