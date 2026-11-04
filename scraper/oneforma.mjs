@@ -1,12 +1,12 @@
 // OneForma: halaman /projects/ dirender di server, ada tombol Next.
 import * as cheerio from 'cheerio';
-import { getNames } from 'i18n-iso-countries';
+import countries from 'i18n-iso-countries';
 import { getHtml, textParts, clean, sleep, savePlatform } from './common.mjs';
 
 const START = 'https://www.oneforma.com/projects/';
 const MAX_PAGES = 20;
 
-const COUNTRIES = [...Object.values(getNames('en')), 'Remote'];
+const COUNTRIES = [...Object.values(countries.getNames('en')), 'Remote'];
 const ALT = [...COUNTRIES]
   .sort((a, b) => b.length - a.length)
   .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
