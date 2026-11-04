@@ -1,12 +1,6 @@
 import { chromium } from 'playwright';
 import countries from 'i18n-iso-countries';
-import { extractCountryCodes, savePlatform, sleep } from './common.mjs';
-
-const MICRO1_RESTRICTED = new Set([
-  'AF', 'BY', 'CN', 'CU', 'CD', 'HK', 'IR', 'IQ', 'LY', 'MO', 'MM', 'KP', 'RU',
-  'SO', 'SS', 'SD', 'SY', 'VE', 'UA', 'YE', 'ET',
-]);
-const MICRO1_COUNTRIES = Object.keys(countries.getNames('en')).filter((code) => !MICRO1_RESTRICTED.has(code));
+import { clean, extractCountryCodes, savePlatform, sleep } from './common.mjs';
 
 const SOURCES = [
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
@@ -98,7 +92,7 @@ async function scrapeSource(page, source) {
 
 function toItem(job, source) {
   const detectedCodes = extractCountryCodes(job.text);
-  const codes = source.platform === 'micro1' ? MICRO1_COUNTRIES : detectedCodes;
+  const codes = detectedCodes;
   const locations = codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
   if (!locations.length && /\bremote\b/i.test(job.text)) locations.push('Remote');
   const pay = job.text.match(/(?:[$€£]\s?[\d,.]+(?:\s?[-–]\s?[$€£]?\s?[\d,.]+)?\s*(?:\/\s*(?:hr|hour|task|project))?)/i)?.[0] ?? null;
@@ -117,7 +111,8 @@ async function scrapeImerit(page) {
   const url = 'https://imerit.ai/careers-listing/';
   const items = [];
   let buttonCount = 0;
-  for (let index = 0; index < 40; index++) {
+  let failedButtons = 0;
+  for (let index = 0; index < 100; index++) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(1200);
     const buttons = page.getByText(/view role/i);
@@ -151,6 +146,7 @@ async function scrapeImerit(page) {
       await button.click({ timeout: 5000 });
       await page.waitForTimeout(500);
     } catch {
+      failedButtons++;
       continue;
     }
     const currentUrl = new URL(page.url());
@@ -162,7 +158,9 @@ async function scrapeImerit(page) {
     if (!sourceUrl && card.id) sourceUrl = url + '?job=' + encodeURIComponent(card.id);
     const detailText = (await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
     const detailTitle = await page.locator('h1,h2').first().innerText().catch(() => '');
-    const projectName = clean(detailTitle) && clean(detailTitle).length > 5 ? clean(detailTitle) : clean(card.title);
+    const projectName = [card.title, detailTitle]
+      .map(clean)
+      .find((title) => title.length > 5 && !/join our global team|careers?|open roles|featured role/i.test(title)) || '';
     const location = detailText.match(/📍\s*([^⏱📅💰🌐]{2,100})/u)?.[1]
       || detailText.match(/Location\s*[:：]\s*([^\n]{2,100})/i)?.[1]
       || card.text.match(/📍\s*([^⏱📅💰🌐]{2,100})/u)?.[1];
@@ -180,7 +178,12 @@ async function scrapeImerit(page) {
         pay: clean(pay) || null,
         source_url: sourceUrl,
       });
+    } else {
+      failedButtons++;
     }
+  }
+  if (failedButtons) {
+    throw new Error(failedButtons + ' dari ' + buttonCount + ' kartu gagal dibaca; data iMerit lama dipertahankan');
   }
   if (!items.length) throw new Error('Klik View role tidak menghasilkan URL detail dengan parameter job');
   await savePlatform('iMerit', items);
