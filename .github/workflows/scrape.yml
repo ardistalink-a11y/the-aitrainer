@@ -8,7 +8,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: scraper
@@ -23,6 +23,15 @@ jobs:
       - run: npm install
       - name: Lever (Welo, Appen, RWS, TSMG)
         run: node lever.mjs
+      - name: Ashby (Lilt)
+        if: always()
+        run: node ashby.mjs
+      - name: Mercor
+        if: always()
+        run: node mercor.mjs
+      - name: OneForma
+        if: always()
+        run: node oneforma.mjs
       - name: Install browser
         if: always()
         run: npx playwright install --with-deps chromium
