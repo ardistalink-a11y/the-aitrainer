@@ -15,15 +15,101 @@ const COUNTRY_ALIASES = [
   [/\bUK\b/i, 'GB'],
   [/\bUnited Kingdom\b/i, 'GB'],
   [/\bUAE\b/i, 'AE'],
+  [/\bBrasil\b/i, 'BR'],
 ];
+
+const CITY_COUNTRY = new Map();
+for (const [code, names] of Object.entries({
+  DE: 'Aalen|Augsburg|Baden-Baden|Bamberg|Bayreuth|Berlin|Erfurt|Frankfurt|Freiburg|Freiburg im Breisgau|Hamburg|Heidelberg|Kaiserslautern|Karlsruhe|Kassel|Koblenz|Landshut|Mainz|Marburg|Munich|München|Passau|Regensburg|Reutlingen|Stuttgart|Trier|Würzburg|Wiesbaden|Pforzheim|Villingen-Schwenningen|Weiden in der Oberpfalz|Albstadt|Heilbronn|Idar-Oberstein|Bad Kreuznach|Lichtenfels|Suhl|Ulm|Ehingen|Münster|Gera|Nuremberg|Bad Mergentheim|Leipzig|Schwäbisch Gmünd|Schwäbisch Hall|Steinau an der Straße|Rosenheim|Cologne|Ingolstadt|Siegen|Neubrandenburg|Aachen|Bad Hersfeld|Oldenburg|Mannheim|Kindsbach|Dresden|Hannover|Essen|Halle (Saale)|Dortmund|Rostock|Chemnitz|Bremen|Bochum|Bonn|Ansbach',
+  US: 'Atlanta|Austin|Boston|Chicago|Cincinnati|Columbus|Dallas|Houston|Indianapolis|Las Vegas|Los Angeles|Louisville|Miami|Nashville|New Orleans|New York|Orlando|Philadelphia|Phoenix|Palo Alto|San Diego|San Francisco|Seattle|Tampa|Washington|Mountain View|Sunnyvale|Redmond|Burlingame',
+  FR: 'Paris|Valence|Toulouse|Lyon|Bordeaux|Dijon|Mont-de-Marsan|Montmorillon|Brive-la-Gaillarde|Nantes|Angouleme|Rodez|Clermont-Ferrand|Rignac|Bayonne|Ales|Alençon|Annecy|Chalon-sur-Saône|Albi|Cesson-Sevigne|Charleville-Mézières|Brest|Bourges|Agen|Albaret-Sainte-Marie|Caen|Cahors|Biscarrosse',
+  BE: 'Brussels|Leuven|Bruges',
+  GB: 'London|Bristol|Birmingham|Cambridge|Manchester',
+  NL: 'Amsterdam|Rotterdam|The Hague|Hague|Amersfoort|Eindhoven|Eindhover|Almere',
+  CH: 'Bern|Geneva|Zurich|Zürich|St. Gallen|St Gallen|Furttal|Lausanne|Basel|Chur',
+  PL: 'Krakow|Kraków|Warsaw|Gdańsk',
+  IT: 'Milan|Rome|Turin|Bologna|Ravenna|Naples|Prato|Foligno|Brescia|Verona|Grosseto|Cuneo|Crotone|Avezzano|Campobasso|Albenga|Alba',
+  IE: 'Dublin',
+  AT: 'Vienna',
+  PT: 'Lisbon|Porto|Coimbra|Aveiro',
+  CZ: 'Prague|Brno',
+  SE: 'Stockholm',
+  EE: 'Tallinn',
+  UA: 'Lviv|Kyiv',
+  FI: 'Helsinki',
+  NO: 'Oslo|Lørenskog',
+  IN: 'Hyderabad|New Delhi',
+  TH: 'Bangkok|Chiang Mai|Chonburi',
+  MY: 'Kuala Lumpur|Butterworth',
+  BR: 'Sao Paulo|São Paulo|San Paulo|Salvador|Fortaleza|Belo Horizonte|Manaus|Curitiba|Belém|Porto Alegre|Goiânia|Campinas|Guarulhos|São Luís|Maceió|Natal|João Pessoa|Recife|Rio de Janeiro',
+  RO: 'Bucharest|Craiova|Cluj-Napoca|Brașov',
+  HU: 'Budapest',
+  BG: 'Sofia|Varna',
+  LV: 'Riga',
+  CA: 'Toronto|Ottawa|Montreal|Vancouver|Calgary|Edmonton',
+  AU: 'Sydney|Melbourne|Brisbane|Perth|Adelaide',
+  ID: 'Jakarta',
+  ES: 'Madrid|Barcelona|Pamplona|Bilbao|Zaragoza|Vigo|Murcia|Lugo|Santiago de Compostela|Seville|Vitoria-Gasteiz|Santander|Jerez de la Frontera|Valencia|Tarragona|Cordoba|Antequera|Castuera|Cabanillas del Campo|Astorga|Alovera|Ciudad Rodrigo',
+  JP: 'Tokyo|Kawasaki|Funabashi|Saitama',
+  VN: 'Hanoi|Da Nang',
+  SA: 'Riyadh',
+  PH: 'Manila|Davao City|Cebu City|Mandaue|Dasmariñas|Angeles|Calamba|Caloocan',
+  RS: 'Belgrade',
+  SK: 'Bratislava|Trnava',
+  SI: 'Ljubljana',
+  TW: 'Taipei',
+  NZ: 'Wellington',
+  ZA: 'Cape Town',
+  LT: 'Vilnius',
+  AE: 'Dubai',
+  DK: 'Copenhagen',
+  GR: 'Thessaloniki|Athens',
+  CY: 'Nicosia',
+  TR: 'Istanbul',
+  QA: 'Doha',
+  MD: 'Chișinău|Bălți',
+  HR: 'Zagreb',
+})) {
+  for (const name of names.split('|')) CITY_COUNTRY.set(normalizeKey(name), code);
+}
+
+const US_STATES = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
+const CA_PROVINCES = new Set('AB BC MB NB NL NS NT NU ON PE QC SK YT'.split(' '));
+
+function normalizeKey(value) {
+  return String(value || '').toLocaleLowerCase('en').normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
 
 const normalizeCountryText = (value) =>
   value.toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
+function cityCountryCodes(raw) {
+  const found = new Set();
+  const text = String(raw || '');
+  for (const part of text.split(/[\/;|]+/)) {
+    const value = part.trim();
+    const normalized = normalizeKey(value);
+    if (CITY_COUNTRY.has(normalized)) found.add(CITY_COUNTRY.get(normalized));
+
+    const pieces = value.split(',').map((piece) => piece.trim());
+    const suffix = (pieces.at(-1) || '').toUpperCase().replace(/\./g, '');
+    const usSuffix = pieces.length > 1 && US_STATES.has(suffix);
+    const caSuffix = pieces.length > 1 && CA_PROVINCES.has(suffix);
+    if (usSuffix) found.add('US');
+    if (caSuffix) found.add('CA');
+    if (pieces.length > 1 && !usSuffix && !caSuffix) {
+      const city = normalizeKey(pieces[0]);
+      if (CITY_COUNTRY.has(city)) found.add(CITY_COUNTRY.get(city));
+    }
+  }
+  return [...found];
+}
+
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const normalized = ' ' + normalizeCountryText(text) + ' ';
-  const found = new Set();
+  const found = new Set(cityCountryCodes(text));
   for (const [pattern, code] of COUNTRY_ALIASES) {
     if (pattern.test(text)) found.add(code);
   }
