@@ -5,30 +5,31 @@ export default function Home() {
 
   return (
     <>
-      <header className="top">
+      <div className="stripe" />
+      <header className="wrap top">
         <h1 className="brand">
-          digestai<span>.job</span>
+          The <span>AI</span>Trainer
         </h1>
         <p className="lede">
-          Proyek AI dari berbagai platform, terkumpul di satu tempat. Klik
-          proyek untuk lanjut ke platform aslinya.
+          AI training projects from many platforms, in one place. Click a
+          project to apply on the original platform.
         </p>
       </header>
 
-      <main>
+      <main className="wrap">
         <ProjectList />
       </main>
 
-      <footer className="foot">
+      <footer className="wrap foot">
         <p>
-          digestai.job tidak berafiliasi dengan platform mana pun yang
-          tercantum. Semua nama platform milik pemiliknya masing-masing.
-          Pendaftaran dilakukan langsung di platform tersebut.
+          The AITrainer is not affiliated with any of the listed platforms. All
+          platform names belong to their respective owners. Applications are
+          made directly on each platform.
         </p>
         {reportUrl ? (
           <p>
             <a href={reportUrl} target="_blank" rel="noopener noreferrer">
-              Laporkan link mati
+              Report a broken link
             </a>
           </p>
         ) : null}

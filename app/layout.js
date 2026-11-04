@@ -4,14 +4,14 @@ import './globals.css';
 const font = Bricolage_Grotesque({ subsets: ['latin'], display: 'swap' });
 
 export const metadata = {
-  title: 'digestai.job',
+  title: 'The AITrainer',
   description:
-    'Proyek AI dari berbagai platform, terkumpul di satu tempat. Klik proyek untuk lanjut ke platform aslinya.',
+    'AI training projects from many platforms, collected in one place. Click a project to apply on the original platform.',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id">
+    <html lang="en">
       <body className={font.className}>{children}</body>
     </html>
   );

@@ -3,33 +3,58 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-const PAGE = 30;
+const PAGE = 24;
 const KEY = 'digestai.marks';
-const FMT = new Intl.DateTimeFormat('id-ID', {
-  day: 'numeric',
+const FMT = new Intl.DateTimeFormat('en-US', {
   month: 'short',
+  day: 'numeric',
   timeZone: 'Asia/Jakarta',
 });
-const TAG = {
-  indonesia: 'Indonesia',
-  worldwide: 'Worldwide',
-  unknown: 'Lokasi belum jelas',
-  excluded: 'Bukan untuk Indonesia',
-};
 const MARKS = {
-  none: 'Belum dilamar',
-  applied: 'Sudah dilamar',
-  process: 'Dalam proses',
+  none: 'Not applied',
+  applied: 'Applied',
+  process: 'In process',
 };
+const SCOPES = [
+  ['all', 'All locations'],
+  ['indonesia', 'Indonesia'],
+  ['worldwide', 'Worldwide'],
+];
+// Role dicocokkan dari kata kunci di judul / tipe tugas
+const ROLES = {
+  Transcription: ['transcri'],
+  'Translation & Localization': ['translat', 'locali', 'linguist'],
+  'Annotation & Labeling': ['annotat', 'label'],
+  'Evaluation & Rating': ['evaluat', 'rater', 'rating'],
+  'Quality Control': ['quality', 'qc', 'review'],
+  'AI Trainer': ['trainer', 'ai train'],
+  'Coding & Engineering': ['coding', 'developer', 'engineer', 'software', 'programm'],
+  'Domain Expert': ['expert', 'finance', 'legal', 'medical', 'math', 'physics', 'chemistry', 'biology'],
+  'Operations & Coordination': ['coordinator', 'operations', 'manager'],
+};
+
+function pageList(cur, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const s = new Set([1, total, cur - 1, cur, cur + 1]);
+  if (cur <= 3) [2, 3, 4].forEach((n) => s.add(n));
+  if (cur >= total - 2) [total - 1, total - 2, total - 3].forEach((n) => s.add(n));
+  const arr = [...s].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  const out = [];
+  arr.forEach((n, i) => {
+    if (i && n - arr[i - 1] > 1) out.push('gap' + i);
+    out.push(n);
+  });
+  return out;
+}
 
 export default function ProjectList() {
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
-  const [platform, setPlatform] = useState('');
-  const [scope, setScope] = useState('default');
+  const [scope, setScope] = useState('all');
+  const [role, setRole] = useState('');
   const [mine, setMine] = useState('all');
   const [showClosed, setShowClosed] = useState(false);
-  const [platforms, setPlatforms] = useState([]);
+  const [page, setPage] = useState(1);
   const [marks, setMarks] = useState({});
   const [ready, setReady] = useState(false);
   const [rows, setRows] = useState([]);
@@ -49,8 +74,9 @@ export default function ProjectList() {
   const marksRef = useRef({});
   const reqId = useRef(0);
   const userId = user?.id ?? null;
+  const totalPages = Math.max(1, Math.ceil(count / PAGE));
 
-  // Sesi login
+  // Login session
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
@@ -63,7 +89,7 @@ export default function ProjectList() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  // Muat penanda lamaran: dari akun kalau login, dari browser kalau belum
+  // Load application marks: from the account if signed in, else from this browser
   useEffect(() => {
     if (!authChecked || !supabase) return;
     let cancelled = false;
@@ -77,7 +103,6 @@ export default function ProjectList() {
       if (userId) {
         const entries = Object.entries(local);
         if (entries.length) {
-          // pindahkan penanda lama di browser ini ke akun
           const up = await supabase.from('user_marks').upsert(
             entries.map(([project_id, mark]) => ({ user_id: userId, project_id, mark })),
             { onConflict: 'user_id,project_id' }
@@ -105,25 +130,19 @@ export default function ProjectList() {
   }, [authChecked, userId]);
 
   useEffect(() => {
-    const t = setTimeout(() => setTerm(q.trim().replace(/[,()%*]/g, ' ').trim()), 300);
+    const t = setTimeout(() => {
+      setTerm(q.trim().replace(/[,()%*]/g, ' ').trim());
+      setPage(1);
+    }, 300);
     return () => clearTimeout(t);
   }, [q]);
 
-  useEffect(() => {
-    if (!supabase) return;
-    supabase
-      .from('platform_list')
-      .select('platform')
-      .then(({ data }) => {
-        if (data) setPlatforms(data.map((d) => d.platform).sort());
-      });
-  }, []);
-
-  async function run(offset) {
+  async function run() {
     if (!supabase) return;
     const id = ++reqId.current;
     setLoading(true);
     setError(null);
+    const offset = (page - 1) * PAGE;
 
     let qy = supabase
       .from('projects')
@@ -133,14 +152,20 @@ export default function ProjectList() {
       .range(offset, offset + PAGE - 1);
 
     if (!showClosed) qy = qy.eq('status', 'open');
-    if (platform) qy = qy.eq('platform', platform);
-    if (scope === 'indonesia') qy = qy.eq('indonesia_status', 'indonesia');
-    else if (scope === 'default')
-      qy = qy.in('indonesia_status', ['indonesia', 'worldwide', 'unknown']);
-    if (term)
+    if (scope === 'all') qy = qy.in('indonesia_status', ['indonesia', 'worldwide']);
+    else qy = qy.eq('indonesia_status', scope);
+
+    if (role) {
+      const kws = ROLES[role] || [];
       qy = qy.or(
-        `project_name.ilike.%${term}%,task_type.ilike.%${term}%,language.ilike.%${term}%`
+        kws.flatMap((k) => [`project_name.ilike.%${k}%`, `task_type.ilike.%${k}%`]).join(',')
       );
+    }
+    if (term) {
+      qy = qy.or(
+        `project_name.ilike.%${term}%,task_type.ilike.%${term}%,language.ilike.%${term}%,platform.ilike.%${term}%`
+      );
+    }
 
     if (mine !== 'all') {
       const ids = Object.keys(marksRef.current);
@@ -164,15 +189,20 @@ export default function ProjectList() {
     if (id !== reqId.current) return;
     if (err) setError(err.message);
     else {
-      setRows((prev) => (offset ? [...prev, ...data] : data));
+      setRows(data);
       setCount(total ?? 0);
     }
     setLoading(false);
   }
 
   useEffect(() => {
-    if (ready) run(0);
-  }, [ready, term, platform, scope, mine, showClosed]);
+    if (ready) run();
+  }, [ready, term, scope, role, mine, showClosed, page]);
+
+  const change = (setter) => (v) => {
+    setter(v);
+    setPage(1);
+  };
 
   async function setMark(id, value) {
     const next = { ...marksRef.current };
@@ -189,7 +219,7 @@ export default function ProjectList() {
           : await supabase
               .from('user_marks')
               .upsert({ user_id: userId, project_id: id, mark: value }, { onConflict: 'user_id,project_id' });
-      if (res.error) setSyncMsg('Status belum tersimpan: ' + res.error.message);
+      if (res.error) setSyncMsg('Could not save status: ' + res.error.message);
     } else {
       try {
         localStorage.setItem(KEY, JSON.stringify(next));
@@ -211,7 +241,7 @@ export default function ProjectList() {
       return;
     }
     if (mode === 'signup' && !data.session) {
-      setAuthMsg('Akun dibuat. Cek email untuk konfirmasi, lalu masuk.');
+      setAuthMsg('Account created. Check your email to confirm, then sign in.');
       return;
     }
     setShowAuth(false);
@@ -219,7 +249,7 @@ export default function ProjectList() {
   }
 
   if (!supabase) {
-    return <p className="notice">Variabel environment Supabase belum diisi.</p>;
+    return <p className="notice">Supabase environment variables are not set.</p>;
   }
 
   return (
@@ -227,9 +257,9 @@ export default function ProjectList() {
       <div className="auth">
         {user ? (
           <span>
-            Masuk sebagai {user.email}.{' '}
+            Signed in as {user.email}.{' '}
             <button className="link" onClick={() => supabase.auth.signOut()}>
-              Keluar
+              Sign out
             </button>
           </span>
         ) : showAuth ? (
@@ -251,115 +281,173 @@ export default function ProjectList() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password (min. 6 karakter)"
+              placeholder="Password (min. 6 characters)"
               autoComplete="current-password"
               minLength={6}
               required
             />
-            <button className="btn" type="submit" disabled={busy}>
-              Masuk
+            <button className="btn primary" type="submit" disabled={busy}>
+              Sign in
             </button>
             <button className="btn" type="button" disabled={busy} onClick={() => submitAuth('signup')}>
-              Daftar
+              Sign up
             </button>
             {authMsg ? <p className="msg">{authMsg}</p> : null}
           </form>
         ) : (
           <span>
-            Status lamaran tersimpan di browser ini saja.{' '}
+            Application status is saved in this browser only.{' '}
             <button className="link" onClick={() => setShowAuth(true)}>
-              Masuk agar tersinkron antar perangkat
+              Sign in to sync across devices
             </button>
           </span>
         )}
         {syncMsg ? <p className="msg">{syncMsg}</p> : null}
       </div>
 
-      <div className="bar">
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Cari proyek, tipe tugas, atau bahasa"
-          aria-label="Cari proyek"
-        />
-        <select value={platform} onChange={(e) => setPlatform(e.target.value)} aria-label="Filter platform">
-          <option value="">Semua platform</option>
-          {platforms.map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-        <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Filter lokasi">
-          <option value="default">Indonesia + Worldwide</option>
-          <option value="indonesia">Hanya Indonesia</option>
-          <option value="all">Semua lokasi</option>
-        </select>
-        <select value={mine} onChange={(e) => setMine(e.target.value)} aria-label="Filter status lamaran">
-          <option value="all">Semua status lamaran</option>
-          <option value="none">Belum dilamar</option>
-          <option value="applied">Sudah dilamar</option>
-          <option value="process">Dalam proses</option>
-        </select>
-        <label className="check">
-          <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
-          Tampilkan yang sudah ditutup
-        </label>
+      <div className="toolbar">
+        <div className="toolbar-top">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search projects, platforms, languages"
+            aria-label="Search projects"
+          />
+          <select value={role} onChange={(e) => change(setRole)(e.target.value)} aria-label="Filter by role">
+            <option value="">All roles</option>
+            {Object.keys(ROLES).map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </select>
+          <select value={mine} onChange={(e) => change(setMine)(e.target.value)} aria-label="Filter by application status">
+            <option value="all">All statuses</option>
+            <option value="none">Not applied</option>
+            <option value="applied">Applied</option>
+            <option value="process">In process</option>
+          </select>
+        </div>
+        <div className="toolbar-bottom">
+          <div className="seg" role="group" aria-label="Filter by location">
+            {SCOPES.map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                className={scope === v ? 'on' : ''}
+                aria-pressed={scope === v}
+                onClick={() => change(setScope)(v)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={showClosed} onChange={(e) => change(setShowClosed)(e.target.checked)} />
+            Show closed projects
+          </label>
+          <span className="count" aria-live="polite">
+            {loading && rows.length === 0 ? 'Loading…' : `${count} project${count === 1 ? '' : 's'}`}
+          </span>
+        </div>
       </div>
 
-      <p className="count" aria-live="polite">
-        {loading && rows.length === 0 ? 'Memuat…' : `${count} proyek`}
-      </p>
-
       {error ? (
-        <p className="notice">Data belum bisa dimuat: {error}</p>
+        <p className="notice">Could not load projects: {error}</p>
       ) : !loading && rows.length === 0 ? (
-        <p className="notice">Tidak ada proyek yang cocok. Coba ubah atau hapus filter.</p>
+        <p className="notice">No projects match your filters. Try changing or clearing them.</p>
       ) : (
-        <ul className="list">
+        <ul className="grid">
           {rows.map((p) => {
             const m = marks[p.id] || 'none';
+            const closed = p.status !== 'open';
+            const loc = p.raw_location || p.country || '';
+            const chips = [p.task_type, p.language, p.pay].filter(Boolean);
             return (
-              <li key={p.id} className="row">
-                <a className="main" href={p.source_url} target="_blank" rel="noopener noreferrer">
-                  <span className="name">{p.project_name}</span>
-                  <span className="meta">
-                    <b>{p.platform}</b>
-                    <span className={`tag ${p.indonesia_status}`}>{TAG[p.indonesia_status] || TAG.unknown}</span>
-                    {[p.task_type, p.language, p.pay].filter(Boolean).map((x) => (
+              <li key={p.id} className={`card${closed ? ' closed' : ''}`}>
+                <span className="platform">{p.platform}</span>
+                <h2 className="name">
+                  <a href={p.source_url} target="_blank" rel="noopener noreferrer">
+                    {p.project_name}
+                  </a>
+                </h2>
+                {loc ? (
+                  <p className="loc" title={loc}>
+                    {loc}
+                  </p>
+                ) : null}
+                {chips.length ? (
+                  <div className="chips">
+                    {chips.map((x) => (
                       <span key={x}>{x}</span>
                     ))}
-                  </span>
-                </a>
-                <span className="side">
-                  <span>
-                    <span className={`dot ${p.status === 'open' ? 'on' : ''}`} />
-                    {p.status === 'open' ? 'Buka' : 'Ditutup'}
-                  </span>
-                  <select
-                    className="mark"
-                    data-mark={m}
-                    value={m}
-                    onChange={(e) => setMark(p.id, e.target.value)}
-                    aria-label={`Status lamaran: ${p.project_name}`}
-                  >
-                    {Object.entries(MARKS).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                  {p.last_seen ? <small>Dicek {FMT.format(new Date(p.last_seen))}</small> : null}
-                </span>
+                  </div>
+                ) : null}
+                <div className="foot-row">
+                  {closed ? (
+                    <span className="badge">Closed</span>
+                  ) : (
+                    <select
+                      className="mark"
+                      data-mark={m}
+                      value={m}
+                      onChange={(e) => setMark(p.id, e.target.value)}
+                      aria-label={`Application status: ${p.project_name}`}
+                    >
+                      {Object.entries(MARKS).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {p.last_seen ? <small>Checked {FMT.format(new Date(p.last_seen))}</small> : null}
+                </div>
               </li>
             );
           })}
         </ul>
       )}
 
-      {rows.length > 0 && rows.length < count ? (
-        <button className="more" onClick={() => run(rows.length)} disabled={loading}>
-          {loading ? 'Memuat…' : 'Muat lebih banyak'}
-        </button>
+      {totalPages > 1 ? (
+        <nav className="pager" aria-label="Pagination">
+          <button
+            disabled={page === 1}
+            onClick={() => {
+              setPage(page - 1);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            Prev
+          </button>
+          {pageList(page, totalPages).map((n) =>
+            typeof n === 'string' ? (
+              <span key={n} className="gap">
+                …
+              </span>
+            ) : (
+              <button
+                key={n}
+                className={n === page ? 'on' : ''}
+                aria-current={n === page ? 'page' : undefined}
+                onClick={() => {
+                  setPage(n);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                {n}
+              </button>
+            )
+          )}
+          <button
+            disabled={page === totalPages}
+            onClick={() => {
+              setPage(page + 1);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            Next
+          </button>
+        </nav>
       ) : null}
     </section>
   );
