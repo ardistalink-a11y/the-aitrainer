@@ -135,11 +135,11 @@ function cityCountryCodes(raw) {
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const normalized = ' ' + normalizeCountryText(text) + ' ';
-  if (/(?:\bworldwide\b|\bglobal\b|\banywhere\b|\ball countries\b)/i.test(t)) return 'worldwide';
+  if (/(?:\\bworldwide\\b|\\bglobal\\b|\\banywhere\\b|\\ball countries\\b)/i.test(text)) {
     return ALL_COUNTRY_CODES;
   }
   const found = new Set(cityCountryCodes(text));
-  if (/\bEurope\b/i.test(text)) {
+  if (/\\bEurope\\b/i.test(text)) {
     for (const code of EUROPE_COUNTRY_CODES) found.add(code);
   }
   for (const [pattern, code] of COUNTRY_ALIASES) {
