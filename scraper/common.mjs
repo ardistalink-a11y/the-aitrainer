@@ -19,15 +19,15 @@ const COUNTRY_ALIASES = [
 
 const CITY_COUNTRY = new Map();
 for (const [code, names] of Object.entries({
-  DE: 'Aalen Augsburg Baden-Baden Bamberg Bayreuth Berlin Erfurt Frankfurt Freiburg Hamburg Heidelberg Kaiserslautern Karlsruhe Kassel Koblenz Landshut Mainz Marburg Munich München Passau Regensburg Reutlingen Stuttgart Trier Würzburg',
-  US: 'Atlanta Austin Boston Chicago Cincinnati Columbus Dallas Houston Indianapolis Las Vegas Los Angeles Louisville Miami Nashville New Orleans New York Orlando Philadelphia Phoenix Palo Alto San Diego San Francisco Seattle Tampa Washington Mountain View Sunnyvale Redmond Burlingame',
-  FR: 'Paris Valence Toulouse',
-  BE: 'Brussels Leuven',
+  DE: 'Aalen|Augsburg|Baden-Baden|Bamberg|Bayreuth|Berlin|Erfurt|Frankfurt|Freiburg|Hamburg|Heidelberg|Kaiserslautern|Karlsruhe|Kassel|Koblenz|Landshut|Mainz|Marburg|Munich|München|Passau|Regensburg|Reutlingen|Stuttgart|Trier|Würzburg',
+  US: 'Atlanta|Austin|Boston|Chicago|Cincinnati|Columbus|Dallas|Houston|Indianapolis|Las Vegas|Los Angeles|Louisville|Miami|Nashville|New Orleans|New York|Orlando|Philadelphia|Phoenix|Palo Alto|San Diego|San Francisco|Seattle|Tampa|Washington|Mountain View|Sunnyvale|Redmond|Burlingame',
+  FR: 'Paris|Valence|Toulouse',
+  BE: 'Brussels|Leuven',
   GB: 'London',
-  NL: 'Amsterdam Rotterdam Hague',
-  CH: 'Bern Geneva Zurich Zürich St Gallen Furttal',
-  PL: 'Krakow Kraków Warsaw',
-  IT: 'Milan Rome Turin',
+  NL: 'Amsterdam|Rotterdam|The Hague|Hague',
+  CH: 'Bern|Geneva|Zurich|Zürich|St. Gallen|St Gallen|Furttal',
+  PL: 'Krakow|Kraków|Warsaw',
+  IT: 'Milan|Rome|Turin',
   IE: 'Dublin',
   AT: 'Vienna',
   PT: 'Lisbon',
@@ -40,16 +40,16 @@ for (const [code, names] of Object.entries({
   IN: 'Hyderabad',
   TH: 'Bangkok',
   MY: 'Kuala Lumpur',
-  BR: 'Sao Paulo São Paulo San Paulo',
+  BR: 'Sao Paulo|São Paulo|San Paulo',
   RO: 'Bucharest',
   HU: 'Budapest',
   BG: 'Sofia',
   LV: 'Riga',
-  CA: 'Toronto Ottawa Montreal Vancouver',
-  AU: 'Sydney Melbourne',
+  CA: 'Toronto|Ottawa|Montreal|Vancouver',
+  AU: 'Sydney|Melbourne',
   ID: 'Jakarta',
 })) {
-  for (const name of names.split(' ')) CITY_COUNTRY.set(normalizeKey(name), code);
+  for (const name of names.split('|')) CITY_COUNTRY.set(normalizeKey(name), code);
 }
 
 const US_STATES = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
