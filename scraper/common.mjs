@@ -7,28 +7,28 @@ if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY belum diis
 
 export const db = createClient(url, key);
 
-const COUNTRY_NAMES = Object.entries(countries.getNames('en')).sort((a, b) => b[1].length - a[1].length);
+const COUNTRY_NAMES = Object.entries(countries.getNames('en'));
 const COUNTRY_ALIASES = [
-  [/(^|[^A-Z])USA([^A-Z]|$)/i, 'US'],
+  [/\bUSA\b/i, 'US'],
   [/U\.S\./i, 'US'],
-  [/\bUNITED STATES\b/i, 'US'],
+  [/\bUnited States\b/i, 'US'],
   [/\bUK\b/i, 'GB'],
-  [/\bUNITED KINGDOM\b/i, 'GB'],
+  [/\bUnited Kingdom\b/i, 'GB'],
   [/\bUAE\b/i, 'AE'],
 ];
 
+const normalizeCountryText = (value) =>
+  value.toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
+  const normalized = ' ' + normalizeCountryText(text) + ' ';
   const found = new Set();
   for (const [pattern, code] of COUNTRY_ALIASES) {
     if (pattern.test(text)) found.add(code);
   }
   for (const [code, name] of COUNTRY_NAMES) {
-    const pattern = name
-      .split(/([^\p{L}\p{N}]+)/u)
-      .map((part) => (/^[\p{L}\p{N}]+$/u.test(part) ? part : '\\W+'))
-      .join('');
-    if (new RegExp('(^|[^A-Za-z])' + pattern + '([^A-Za-z]|$)', 'iu').test(text)) found.add(code);
+    if (normalized.includes(' ' + normalizeCountryText(name) + ' ')) found.add(code);
   }
   return [...found];
 }
