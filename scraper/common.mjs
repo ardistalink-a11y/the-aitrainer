@@ -113,7 +113,7 @@ function cityCountryCodes(raw) {
   const found = new Set();
   for (const part of String(raw || '').split(/[\\/;|]+/)) {
     const pieces = part.split(',').map((piece) => piece.trim()).filter(Boolean);
-    const suffix = (pieces.at(-1) || '').toUpperCase().replace(/\\./g, '');
+    const suffix = (pieces.at(-1) || '').toUpperCase().replace(/[.]/g, '');
     const usSuffix = pieces.length > 1 && US_STATES.has(suffix);
     const caSuffix = pieces.length > 1 && CA_PROVINCES.has(suffix);
     if (usSuffix) {
@@ -135,11 +135,11 @@ function cityCountryCodes(raw) {
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const normalized = ' ' + normalizeCountryText(text) + ' ';
-  if (/(\\bworldwide\\b|\\bglobal\\b|\\banywhere\\b|\\ball countries\\b)/i.test(text)) {
+  if (/(?:\bworldwide\b|\bglobal\b|\banywhere\b|\ball countries\b)/i.test(text)) {
     return ALL_COUNTRY_CODES;
   }
   const found = new Set(cityCountryCodes(text));
-  if (/\\bEurope\\b/i.test(text)) {
+  if (/\bEurope\b/i.test(text)) {
     for (const code of EUROPE_COUNTRY_CODES) found.add(code);
   }
   for (const [pattern, code] of COUNTRY_ALIASES) {
@@ -178,7 +178,7 @@ export function classifyIndonesia(raw) {
   const t = (raw || '').toLowerCase().trim();
   if (!t) return 'unknown';
   if (/\bindonesia\b/.test(t)) return 'indonesia';
-  if (/(worldwide|global|anywhere|all countries)/.test(t)) return 'worldwide';
+  if (/(?:\bworldwide\b|\bglobal\b|\banywhere\b|\ball countries\b)/i.test(text)) {
   if (/\+\s*\d+\s*more/.test(t)) return 'unknown';
   if (t.split(/[\/;|]/).some((s) => s.trim() === 'remote')) return 'unknown';
   if (t === 'remote') return 'unknown';
