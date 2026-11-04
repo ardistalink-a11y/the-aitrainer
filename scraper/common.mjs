@@ -28,7 +28,7 @@ export function extractCountryCodes(raw) {
       .split(/([^\p{L}\p{N}]+)/u)
       .map((part) => (/^[\p{L}\p{N}]+$/u.test(part) ? part : '\\W+'))
       .join('');
-    if (new RegExp('(^|[^\p{L}])' + pattern + '([^\p{L}]|$)', 'iu').test(text)) found.add(code);
+    if (new RegExp('(^|[^A-Za-z])' + pattern + '([^A-Za-z]|$)', 'iu').test(text)) found.add(code);
   }
   return [...found];
 }
