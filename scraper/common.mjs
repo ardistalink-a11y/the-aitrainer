@@ -17,13 +17,76 @@ const COUNTRY_ALIASES = [
   [/\bUAE\b/i, 'AE'],
 ];
 
+const CITY_COUNTRY = new Map();
+for (const [code, names] of Object.entries({
+  DE: 'Aalen Augsburg Baden-Baden Bamberg Bayreuth Berlin Erfurt Frankfurt Freiburg Hamburg Heidelberg Kaiserslautern Karlsruhe Kassel Koblenz Landshut Mainz Marburg Munich München Passau Regensburg Reutlingen Stuttgart Trier Würzburg',
+  US: 'Atlanta Austin Boston Chicago Cincinnati Columbus Dallas Houston Indianapolis Las Vegas Los Angeles Louisville Miami Nashville New Orleans New York Orlando Philadelphia Phoenix Palo Alto San Diego San Francisco Seattle Tampa Washington Mountain View Sunnyvale Redmond Burlingame',
+  FR: 'Paris Valence Toulouse',
+  BE: 'Brussels Leuven',
+  GB: 'London',
+  NL: 'Amsterdam Rotterdam Hague',
+  CH: 'Bern Geneva Zurich Zürich St Gallen Furttal',
+  PL: 'Krakow Kraków Warsaw',
+  IT: 'Milan Rome Turin',
+  IE: 'Dublin',
+  AT: 'Vienna',
+  PT: 'Lisbon',
+  CZ: 'Prague',
+  SE: 'Stockholm',
+  EE: 'Tallinn',
+  UA: 'Lviv',
+  FI: 'Helsinki',
+  NO: 'Oslo',
+  IN: 'Hyderabad',
+  TH: 'Bangkok',
+  MY: 'Kuala Lumpur',
+  BR: 'Sao Paulo São Paulo San Paulo',
+  RO: 'Bucharest',
+  HU: 'Budapest',
+  BG: 'Sofia',
+  LV: 'Riga',
+  CA: 'Toronto Ottawa Montreal Vancouver',
+  AU: 'Sydney Melbourne',
+  ID: 'Jakarta',
+})) {
+  for (const name of names.split(' ')) CITY_COUNTRY.set(normalizeKey(name), code);
+}
+
+const US_STATES = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
+const CA_PROVINCES = new Set('AB BC MB NB NL NS NT NU ON PE QC SK YT'.split(' '));
+
+function normalizeKey(value) {
+  return String(value || '').toLocaleLowerCase('en').normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
 const normalizeCountryText = (value) =>
   value.toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+function cityCountryCodes(raw) {
+  const found = new Set();
+  const text = String(raw || '');
+  for (const part of text.split(/[\/;|]+/)) {
+    const value = part.trim();
+    const normalized = normalizeKey(value);
+    if (CITY_COUNTRY.has(normalized)) found.add(CITY_COUNTRY.get(normalized));
+
+    const pieces = value.split(',').map((piece) => piece.trim());
+    const suffix = (pieces.at(-1) || '').toUpperCase().replace(/\./g, '');
+    if (pieces.length > 1 && US_STATES.has(suffix)) found.add('US');
+    if (pieces.length > 1 && CA_PROVINCES.has(suffix)) found.add('CA');
+    if (pieces.length > 1) {
+      const city = normalizeKey(pieces[0]);
+      if (CITY_COUNTRY.has(city)) found.add(CITY_COUNTRY.get(city));
+    }
+  }
+  return [...found];
+}
 
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const normalized = ' ' + normalizeCountryText(text) + ' ';
-  const found = new Set();
+  const found = new Set(cityCountryCodes(text));
   for (const [pattern, code] of COUNTRY_ALIASES) {
     if (pattern.test(text)) found.add(code);
   }
