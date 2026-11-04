@@ -135,7 +135,7 @@ function cityCountryCodes(raw) {
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const normalized = ' ' + normalizeCountryText(text) + ' ';
-  if (/(?:\bworldwide\b|\bglobal\b|\banywhere\b|\ball countries\b)/i.test(text)) {
+  if (/(?:\bworldwide\b|\bglobal\b|\banywhere\b|\ball countries\b)/i.test(t)) return 'worldwide';
     return ALL_COUNTRY_CODES;
   }
   const found = new Set(cityCountryCodes(text));
