@@ -74,10 +74,21 @@ export default function ProjectList() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from('projects').select('country_codes').then(({ data }) => {
-      const codes = new Set((data || []).flatMap((row) => row.country_codes || []));
-      setCountries([...codes].sort());
-    });
+    let cancelled = false;
+    (async () => {
+      const codes = new Set();
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('country_codes')
+          .range(offset, offset + 999);
+        if (error || !data) break;
+        data.forEach((row) => (row.country_codes || []).forEach((code) => codes.add(code)));
+        if (data.length < 1000) break;
+      }
+      if (!cancelled) setCountries([...codes].sort());
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Login session
