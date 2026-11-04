@@ -10,103 +10,99 @@ const SOURCES = [
   { platform: 'iMerit', url: 'https://imerit.ai/careers-listing/', paths: /\/(careers|jobs?|opportunities)\/[^/]+/i },
   { platform: 'Meridial', url: 'https://www.meridial.ai/projects', paths: /\/(projects|opportunities|jobs?)\/[^/]+/i },
   { platform: 'SME Careers', url: 'https://sme.careers/jobs/', paths: /\/(jobs?|opportunities)\/[^/]+/i },
-  { platform: 'CACTUS', url: 'https://jobs.cactusglobal.com/jobs?locations=,,Indonesia&page=1', paths: /\/(jobs?|job)\/[^/]+/i },
+  { platform: 'CACTUS', url: 'https://jobs.cactusglobal.com/jobs', paths: /\/(jobs?|job)\/[^/]+/i, pages: 20 },
 ];
 
-function candidate(link, source) {
-  if (!link.href || !link.title || link.title.length < 4) return false;
-  if (/^(apply|apply now|details|read more|learn more|view role|view job)$/i.test(link.title.trim())) return false;
-  let url;
-  try { url = new URL(link.href); } catch { return false; }
-  if (!/^https?:$/.test(url.protocol)) return false;
-  return source.paths.test(url.pathname);
+function isCandidate(href, title, source) {
+  if (!href || !title || title.length < 4) return false;
+  if (/^(apply|apply now|details|read more|learn more|view role|view job)$/i.test(title.trim())) return false;
+  try {
+    const url = new URL(href);
+    return /^https?:$/.test(url.protocol) && source.paths.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
-async function readCards(page, source) {
-  return page.evaluate((patterns) => {
-    const out = [];
-    const links = [...document.querySelectorAll('a[href]')];
-    for (const a of links) {
-      const title = (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
-      const href = a.href;
-      if (!href || !title) continue;
-      let card = a;
-      for (let n = 0; n < 6 && card.parentElement; n++) {
-        const parent = card.parentElement;
-        const text = (parent.innerText || '').trim();
-        if (text.length > 60 && text.length < 2500 && /apply|remote|location|country|salary|\$|€|£/i.test(text)) {
-          card = parent;
-          break;
-        }
-        card = parent;
-      }
-      const container = card.closest('article,li,[class*="job"],[class*="role"],[class*="card"]') || card;
-      const text = (container.innerText || '').trim().replace(/\s+/g, ' ');
-      if (patterns.some((pattern) => new RegExp(pattern, 'i').test(new URL(href).pathname))) {
-        const heading = container.querySelector('h1,h2,h3,h4,[class*="title"]');
-        out.push({ title: (heading?.innerText || title).trim().replace(/\s+/g, ' '), href, text });
-      }
-    }
-    return out;
-  }, [source.paths.source]);
-}
-
-async function scrapeSource(page, source) {
-  await page.goto(source.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(2500);
+async function collectPage(page, source) {
   const jobs = new Map();
   let stable = 0;
   for (let attempt = 0; attempt < 30 && stable < 3; attempt++) {
-    const cards = await page.evaluate((pattern) => {
+    const cards = await page.evaluate((pathPattern) => {
       const out = [];
       for (const a of document.querySelectorAll('a[href]')) {
         const href = a.href;
-        const title = (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
-        if (!href || !title || title.length < 4 || !new RegExp(pattern, 'i').test(new URL(href).pathname)) continue;
-        if (/^(apply|apply now|details|read more|learn more|view role|view job)$/i.test(title)) continue;
+        const linkText = (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+        if (!href || !linkText || !new RegExp(pathPattern, 'i').test(new URL(href).pathname)) continue;
         let node = a;
-        for (let n = 0; n < 5 && node.parentElement; n++) {
+        let chosen = node;
+        for (let n = 0; n < 6 && node.parentElement; n++) {
           node = node.parentElement;
           const text = (node.innerText || '').trim();
-          if (text.length >= 60 && text.length < 2500 && /apply|remote|location|country|salary|\$|€|£/i.test(text)) break;
+          if (text.length >= 50 && text.length < 2200 && /apply|remote|location|country|salary|\$|€|£/i.test(text)) {
+            chosen = node;
+            break;
+          }
+          chosen = node;
         }
-        const container = node.closest('article,li,[class*="job"],[class*="role"],[class*="card"]') || node;
-        const text = (container.innerText || '').trim().replace(/\s+/g, ' ');
-        const heading = container.querySelector('h1,h2,h3,h4,[class*="title"]');
-        out.push({ title: (heading?.innerText || title).trim().replace(/\s+/g, ' '), href, text });
+        const card = chosen.closest('article,li,[data-job-id],[class*="job-card"],[class*="job-result"],[class*="role-card"],[class*="opportunity-card"]') || chosen;
+        const text = (card.innerText || '').trim().replace(/\s+/g, ' ');
+        const heading = card.querySelector('h1,h2,h3,h4,[class*="title"]');
+        const title = (heading?.innerText || linkText).trim().replace(/\s+/g, ' ');
+        out.push({ href, title, text });
       }
       return out;
     }, source.paths.source);
     let added = 0;
     for (const job of cards) {
+      if (!isCandidate(job.href, job.title, source)) continue;
       try {
         const url = new URL(job.href);
-        if (!candidate({ href: url.href, title: job.title }, source)) continue;
         url.hash = '';
-        if (!jobs.has(url.href)) { jobs.set(url.href, { ...job, href: url.href }); added++; }
+        if (!jobs.has(url.href)) {
+          jobs.set(url.href, { ...job, href: url.href });
+          added++;
+        }
       } catch {}
     }
-    const loadMore = page.getByRole('button', { name: /load more|show more|view more/i }).first();
-    if (await loadMore.count()) {
-      try { await loadMore.click({ timeout: 1000 }); await page.waitForTimeout(800); } catch {}
+    const button = page.getByRole('button', { name: /load more|show more|view more/i }).first();
+    if (await button.count()) {
+      try { await button.click({ timeout: 1000 }); await page.waitForTimeout(700); } catch {}
     }
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await sleep(800);
+    await sleep(700);
     stable = added ? 0 : stable + 1;
   }
   return [...jobs.values()];
 }
 
+async function scrapeSource(page, source) {
+  const all = new Map();
+  const maxPages = source.pages || 1;
+  for (let n = 1; n <= maxPages; n++) {
+    const url = new URL(source.url);
+    if (source.pages) url.searchParams.set('page', String(n));
+    await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(1800);
+    const jobs = await collectPage(page, source);
+    if (!jobs.length && n === 1) break;
+    if (!jobs.length && n > 1) break;
+    for (const job of jobs) all.set(job.href, job);
+    if (!source.pages || jobs.length < 10) break;
+  }
+  return [...all.values()];
+}
+
 function toItem(job) {
   const codes = extractCountryCodes(job.text);
-  const location = codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
-  if (!location.length && /\bremote\b/i.test(job.text)) location.push('Remote');
+  const locations = codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
+  if (!locations.length && /\bremote\b/i.test(job.text)) locations.push('Remote');
   const pay = job.text.match(/(?:[$€£]\s?[\d,.]+(?:\s?[-–]\s?[$€£]?\s?[\d,.]+)?\s*(?:\/\s*(?:hr|hour|task|project))?)/i)?.[0] ?? null;
   return {
     project_name: job.title,
     task_type: null,
-    country: location.join(', ') || null,
-    raw_location: location.join(', ') || null,
+    country: locations.join(', ') || null,
+    raw_location: locations.join(', ') || null,
     country_codes: codes,
     pay,
     source_url: job.href,
