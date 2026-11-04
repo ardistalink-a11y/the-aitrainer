@@ -332,7 +332,7 @@ export default function ProjectList() {
           </select>
         </div>
         <div className="toolbar-bottom">
-          <select value={country} onChange={(e) => change(setCountry)(e.target.value)} aria-label="Filter by country">
+          <select className="country-filter" value={country} onChange={(e) => change(setCountry)(e.target.value)} aria-label="Filter by country">
             <option value="all">All countries</option>
             {countries.map((code) => (
               <option key={code} value={code}>{new Intl.DisplayNames(['en'], { type: 'region' }).of(code)}</option>
