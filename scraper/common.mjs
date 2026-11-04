@@ -1,3 +1,4 @@
+import { getNames } from 'i18n-iso-countries';
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.SUPABASE_URL;
@@ -5,6 +6,24 @@ const key = process.env.SUPABASE_SECRET_KEY;
 if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY belum diisi');
 
 export const db = createClient(url, key);
+
+
+const COUNTRY_NAMES = Object.entries(getNames('en')).sort((a, b) => b[1].length - a[1].length);
+const COUNTRY_ALIASES = { USA: 'US', 'U.S.': 'US', 'UNITED STATES': 'US', UK: 'GB', 'U.K.': 'GB', UAE: 'AE' };
+
+export function extractCountryCodes(raw) {
+  const text = String(raw || '');
+  const upper = text.toUpperCase();
+  const found = new Set();
+  for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) {
+    if (new RegExp('(^|[^A-Z])' + alias.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\export const UA =') + '([^A-Z]|$)', 'i').test(text)) found.add(code);
+  }
+  for (const [code, name] of COUNTRY_NAMES) {
+    const escaped = name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\export const UA =');
+    if (new RegExp('(^|[^\\p{L}])' + escaped + '([^\\p{L}]|$)', 'iu').test(text)) found.add(code);
+  }
+  return [...found];
+}
 
 export const UA = 'Mozilla/5.0 (compatible; TheAITrainerBot/1.0; +https://theaitrainer.vercel.app)';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -57,6 +76,7 @@ export async function savePlatform(platform, items) {
       ...i,
       raw_location: raw,
       indonesia_status: i.indonesia_status ?? classifyIndonesia(raw),
+      country_codes: i.country_codes ?? extractCountryCodes(raw),
       platform,
       status: 'open',
       last_seen: runStart,
