@@ -6,6 +6,31 @@ if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY belum diis
 
 export const db = createClient(url, key);
 
+export const UA = 'Mozilla/5.0 (compatible; TheAITrainerBot/1.0; +https://theaitrainer.vercel.app)';
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+
+// Ambil HTML satu halaman
+export async function getHtml(pageUrl) {
+  const res = await fetch(pageUrl, {
+    headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} untuk ${pageUrl}`);
+  return res.text();
+}
+
+// Kumpulkan potongan teks dari sebuah elemen, urut sesuai halaman
+export function textParts(node, out = []) {
+  if (!node) return out;
+  if (node.type === 'text') {
+    const t = clean(node.data);
+    if (t) out.push(t);
+  } else if (node.type !== 'script' && node.type !== 'style' && node.children) {
+    for (const c of node.children) textParts(c, out);
+  }
+  return out;
+}
+
 // Menebak apakah proyek terbuka untuk Indonesia dari teks lokasi.
 // indonesia | worldwide | excluded | unknown
 export function classifyIndonesia(raw) {
@@ -15,6 +40,7 @@ export function classifyIndonesia(raw) {
   if (/(worldwide|global|anywhere|all countries)/.test(t)) return 'worldwide';
   if (/\+\s*\d+\s*more/.test(t)) return 'unknown'; // daftar terpotong
   if (t.split(/[\/;|]/).some((s) => s.trim() === 'remote')) return 'unknown';
+  if (t === 'remote') return 'unknown';
   return 'excluded';
 }
 
@@ -37,7 +63,6 @@ export async function savePlatform(platform, items) {
     };
   });
 
-  // Kirim bertahap supaya aman untuk ratusan baris
   for (let i = 0; i < rows.length; i += 200) {
     const up = await db
       .from('projects')

@@ -1,10 +1,11 @@
 {
-  "name": "digestai-scraper",
-  "version": "0.1.0",
+  "name": "theaitrainer-scraper",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "cheerio": "^1.0.0",
     "playwright": "^1.48.0"
   }
 }
