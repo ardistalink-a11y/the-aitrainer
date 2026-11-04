@@ -129,7 +129,7 @@ async function scrapeImerit(page) {
       for (let level = 0; level < 9 && current; level++, current = current.parentElement) {
         const heading = current.querySelector('h1,h2,h3,h4');
         const text = (current.innerText || '').trim();
-        if (heading && text.length > 30 && text.length < 6000) {
+        if (!bestTitle && heading && text.length > 30 && text.length < 6000) {
           best = current;
           bestTitle = (heading.innerText || '').trim();
           bestText = text;
