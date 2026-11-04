@@ -35,6 +35,9 @@ jobs:
       - name: Install browser
         if: always()
         run: npx playwright install --with-deps chromium
+      - name: Public job feeds (Micro1, SME Careers, CACTUS)
+        if: always()
+        run: node public-feeds.mjs
       - name: Additional platforms
         if: always()
         run: node additional-platforms.mjs
