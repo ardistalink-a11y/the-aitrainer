@@ -79,7 +79,9 @@ async function scrapeMicro1() {
           task_type: null,
           country: rawLocation,
           raw_location: rawLocation,
-          country_codes: MICRO1_COUNTRIES,
+          country_codes: /remote|worldwide|global|anywhere/i.test(rawLocation)
+            ? MICRO1_COUNTRIES
+            : (extractCountryCodes(rawLocation).length ? extractCountryCodes(rawLocation) : MICRO1_COUNTRIES),
           pay,
           source_url: sourceUrl,
         };
@@ -185,7 +187,6 @@ await run('micro1', scrapeMicro1);
 await run('SME Careers', scrapeSme);
 await run('CACTUS', scrapeCactus);
 
-const failures = [];
 if (process.env.GITHUB_STEP_SUMMARY) {
   await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1, SME Careers, and CACTUS are fetched from their public sitemap or JSON job endpoints. Check this step’s warnings for any source that did not refresh.\n');
 }
