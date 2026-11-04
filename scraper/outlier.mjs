@@ -47,8 +47,8 @@ page.on('response', async (res) => {
   } catch {}
 });
 
-await page.goto(PAGE, { waitUntil: 'networkidle', timeout: 60000 });
-for (let i = 0; i < 20 && !list; i++) await page.waitForTimeout(1000);
+await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+for (let i = 0; i < 45 && !list; i++) await page.waitForTimeout(1000);
 await browser.close();
 
 if (!list) {
