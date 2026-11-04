@@ -177,10 +177,10 @@ export function textParts(node, out = []) {
 export function classifyIndonesia(raw) {
   const t = (raw || '').toLowerCase().trim();
   if (!t) return 'unknown';
-  if (/\bindonesia\b/.test(t)) return 'indonesia';
-  if (/(?:\bworldwide\b|\bglobal\b|\banywhere\b|\ball countries\b)/i.test(text)) {
-  if (/\+\s*\d+\s*more/.test(t)) return 'unknown';
-  if (t.split(/[\/;|]/).some((s) => s.trim() === 'remote')) return 'unknown';
+  if (/\\bindonesia\\b/.test(t)) return 'indonesia';
+  if (/(?:\\bworldwide\\b|\\bglobal\\b|\\banywhere\\b|\\ball countries\\b)/i.test(t)) return 'worldwide';
+  if (/\\+\\s*\\d+\\s*more/.test(t)) return 'unknown';
+  if (t.split(/[\\/;|]/).some((s) => s.trim() === 'remote')) return 'unknown';
   if (t === 'remote') return 'unknown';
   return 'excluded';
 }
