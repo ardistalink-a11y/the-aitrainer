@@ -9,7 +9,7 @@ const MICRO1_RESTRICTED = new Set([
 const MICRO1_COUNTRIES = Object.keys(countries.getNames('en')).filter((code) => !MICRO1_RESTRICTED.has(code));
 
 const SOURCES = [
-  { platform: 'micro1', url: 'https://www.micro1.ai/experts/opportunities', paths: /\/(opportunities|jobs?|roles?)\/[^/]+/i },
+  { platform: 'micro1', url: 'https://www.micro1.ai/experts/opportunities', paths: /\/(opportunities|jobs?|roles?|post)\/[^/]+/i },
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
   { platform: 'RemoExperts', url: 'https://www.rex.zone/open-opportunities', paths: /\/(open-opportunities|opportunities|jobs?|projects?)\/[^/]+/i },
   { platform: 'Productive Playhouse', url: 'https://productiveplayhouse.applytojob.com/apply/', paths: /\/apply\/[a-z0-9]{6,}(?:\/[^/]*)?$/i },
@@ -65,6 +65,8 @@ async function collectPage(page, source) {
       try {
         const url = new URL(job.href);
         url.hash = '';
+        url.searchParams.delete('referralCode');
+        for (const key of [...url.searchParams.keys()]) if (key.toLowerCase().startsWith('utm_')) url.searchParams.delete(key);
         if (!jobs.has(url.href)) {
           jobs.set(url.href, { ...job, href: url.href });
           added++;
