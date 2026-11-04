@@ -5,6 +5,7 @@ create table if not exists projects (
   task_type text,
   language text,
   country text,
+  country_codes text[] not null default '{}',
   pay text,
   status text not null default 'open',
   indonesia_status text not null default 'unknown',
@@ -20,6 +21,8 @@ alter table projects enable row level security;
 drop policy if exists "public read" on projects;
 create policy "public read" on projects
   for select using (true);
+
+create index if not exists projects_country_codes_idx on projects using gin (country_codes);
 
 create index if not exists projects_indonesia_status_idx
   on projects (indonesia_status, status);

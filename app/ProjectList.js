@@ -15,11 +15,6 @@ const MARKS = {
   applied: 'Applied',
   process: 'In process',
 };
-const SCOPES = [
-  ['all', 'All locations'],
-  ['indonesia', 'Indonesia'],
-  ['worldwide', 'Worldwide'],
-];
 // Role dicocokkan dari kata kunci di judul / tipe tugas
 const ROLES = {
   Transcription: ['transcri'],
@@ -50,7 +45,8 @@ function pageList(cur, total) {
 export default function ProjectList() {
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
-  const [scope, setScope] = useState('all');
+  const [country, setCountry] = useState('all');
+  const [countries, setCountries] = useState([]);
   const [role, setRole] = useState('');
   const [mine, setMine] = useState('all');
   const [showClosed, setShowClosed] = useState(false);
@@ -75,6 +71,25 @@ export default function ProjectList() {
   const reqId = useRef(0);
   const userId = user?.id ?? null;
   const totalPages = Math.max(1, Math.ceil(count / PAGE));
+
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    (async () => {
+      const codes = new Set();
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('country_codes')
+          .range(offset, offset + 999);
+        if (error || !data) break;
+        data.forEach((row) => (row.country_codes || []).forEach((code) => codes.add(code)));
+        if (data.length < 1000) break;
+      }
+      if (!cancelled) setCountries([...codes].sort());
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Login session
   useEffect(() => {
@@ -152,8 +167,8 @@ export default function ProjectList() {
       .range(offset, offset + PAGE - 1);
 
     if (!showClosed) qy = qy.eq('status', 'open');
-    if (scope === 'all') qy = qy.in('indonesia_status', ['indonesia', 'worldwide']);
-    else qy = qy.eq('indonesia_status', scope);
+    if (country === 'worldwide') qy = qy.eq('indonesia_status', 'worldwide');
+    else if (country !== 'all') qy = qy.or(`country_codes.cs.{${country}},indonesia_status.eq.worldwide`);
 
     if (role) {
       const kws = ROLES[role] || [];
@@ -197,7 +212,7 @@ export default function ProjectList() {
 
   useEffect(() => {
     if (ready) run();
-  }, [ready, term, scope, role, mine, showClosed, page]);
+  }, [ready, term, country, role, mine, showClosed, page]);
 
   const change = (setter) => (v) => {
     setter(v);
@@ -328,19 +343,13 @@ export default function ProjectList() {
           </select>
         </div>
         <div className="toolbar-bottom">
-          <div className="seg" role="group" aria-label="Filter by location">
-            {SCOPES.map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                className={scope === v ? 'on' : ''}
-                aria-pressed={scope === v}
-                onClick={() => change(setScope)(v)}
-              >
-                {label}
-              </button>
+          <select className="country-filter" value={country} onChange={(e) => change(setCountry)(e.target.value)} aria-label="Filter by country">
+            <option value="all">All countries</option>
+            {countries.map((code) => (
+              <option key={code} value={code}>{new Intl.DisplayNames(['en'], { type: 'region' }).of(code)}</option>
             ))}
-          </div>
+            {countries.length ? <option value="worldwide">Worldwide only</option> : null}
+          </select>
           <label className="check">
             <input type="checkbox" checked={showClosed} onChange={(e) => change(setShowClosed)(e.target.checked)} />
             Show closed projects

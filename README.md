@@ -4,9 +4,10 @@ Direktori proyek AI dari berbagai platform. Data dari Supabase, tampilan Next.js
 
 ## Menjalankan
 
-1. Di Supabase > SQL Editor, jalankan isi `supabase/schema.sql`.
-2. Salin `.env.example` menjadi `.env.local`, isi URL dan anon key dari Supabase (Project Settings > API).
-3. `npm install` lalu `npm run dev`, buka http://localhost:3000
+1. Di Supabase > SQL Editor, jalankan isi `superbase/schema.sql`.
+2. Untuk database yang sudah ada, jalankan `superbase/migrations/20261104_country_codes.sql` sebelum workflow scraper berikutnya.
+3. Salin `.env.example` menjadi `.env.local`, isi URL dan anon key dari Supabase (Project Settings > API).
+4. `npm install` lalu `npm run dev`, buka http://localhost:3000
 
 ## Deploy
 
