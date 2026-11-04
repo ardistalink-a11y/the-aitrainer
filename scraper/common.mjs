@@ -9,14 +9,25 @@ export const db = createClient(url, key);
 
 
 const COUNTRY_NAMES = Object.entries(getNames('en')).sort((a, b) => b[1].length - a[1].length);
-const COUNTRY_ALIASES = { USA: 'US', 'U.S.': 'US', 'UNITED STATES': 'US', UK: 'GB', 'U.K.': 'GB', UAE: 'AE' };
+const COUNTRY_ALIASES = [
+  [/(^|[^A-Z])USA([^A-Z]|$)/i, 'US'], [/U\\.S\\./i, 'US'], [/\\bUNITED STATES\\b/i, 'US'],
+  [/\\bUK\\b/i, 'GB'], [/\\bUNITED KINGDOM\\b/i, 'GB'], [/\\bUAE\\b/i, 'AE'],
+];
 
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
-  const upper = text.toUpperCase();
   const found = new Set();
-  for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) {
-    if (new RegExp('(^|[^A-Z])' + alias.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\export const UA =') + '([^A-Z]|$)', 'i').test(text)) found.add(code);
+  for (const [pattern, code] of COUNTRY_ALIASES) if (pattern.test(text)) found.add(code);
+  for (const [code, name] of COUNTRY_NAMES) {
+    const pattern = name.split(/([^\\p{L}\\p{N}]+)/u).map((part) =>
+      /^[\\p{L}\\p{N}]+$/u.test(part) ? part : '\\W+'
+    ).join('');
+    if (new RegExp('(^|[^\\p{L}])' + pattern + '([^\\p{L}]|$)', 'iu').test(text)) found.add(code);
+  }
+  return [...found];
+}
+
+export const UA =') + '([^A-Z]|$)', 'i').test(text)) found.add(code);
   }
   for (const [code, name] of COUNTRY_NAMES) {
     const escaped = name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\export const UA =');
