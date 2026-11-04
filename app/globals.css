@@ -114,3 +114,5 @@ a:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible
 .notice { margin: 24px 0; padding: 16px; border: 1px dashed var(--red); border-radius: 12px; color: var(--muted); }
 .foot { padding-top: 40px; padding-bottom: 48px; font-size: 0.85rem; color: var(--muted); }
 .foot p { max-width: 70ch; }
+
+.toolbar-bottom select.country-filter { width: auto; min-width: 220px; }
