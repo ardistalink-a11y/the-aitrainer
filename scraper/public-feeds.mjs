@@ -72,16 +72,18 @@ async function scrapeMicro1() {
           .replace(/\\n/g, '\n');
         if (!title || /not found|no longer available|no longer accepting applications|position has been filled/i.test(text)) return null;
         const location = text.match(/(?:Role Location|Location):\s*([^\n<]{1,160})/i)?.[1];
-        const rawLocation = clean(location) || 'Remote';
+        const rawLocation = clean(location) || null;
         const pay = clean(text.match(/(?:Pay|Pay rate|Compensation):\s*([^\n<]{1,100})/i)?.[1]) || null;
         return {
           project_name: title,
           task_type: null,
           country: rawLocation,
           raw_location: rawLocation,
-          country_codes: /remote|worldwide|global|anywhere/i.test(rawLocation)
-            ? MICRO1_COUNTRIES
-            : (extractCountryCodes(rawLocation).length ? extractCountryCodes(rawLocation) : MICRO1_COUNTRIES),
+          country_codes: !rawLocation
+            ? []
+            : (/remote|worldwide|global|anywhere/i.test(rawLocation)
+              ? MICRO1_COUNTRIES
+              : extractCountryCodes(rawLocation)),
           pay,
           source_url: sourceUrl,
         };
@@ -245,5 +247,5 @@ await run('SME Careers', scrapeSme);
 await run('CACTUS', scrapeCactus);
 
 if (process.env.GITHUB_STEP_SUMMARY) {
-  await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1, SME Careers, and CACTUS are fetched from their public sitemap or JSON job endpoints. Check this step’s warnings for any source that did not refresh.\n');
+  await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1 and REX are fetched from public sitemaps or page payloads; SME Careers and CACTUS are fetched from public JSON job endpoints. Check this step’s warnings for any source that did not refresh.\n');
 }
