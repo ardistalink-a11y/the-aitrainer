@@ -9,14 +9,11 @@ const MICRO1_RESTRICTED = new Set([
 const MICRO1_COUNTRIES = Object.keys(countries.getNames('en')).filter((code) => !MICRO1_RESTRICTED.has(code));
 
 const SOURCES = [
-  { platform: 'micro1', url: 'https://www.micro1.ai/experts/opportunities', paths: /\/(opportunities|jobs?|roles?|post)\/[^/]+/i },
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
   { platform: 'RemoExperts', url: 'https://www.rex.zone/open-opportunities', paths: /\/(open-opportunities|opportunities|jobs?|projects?)\/[^/]+/i },
   { platform: 'Productive Playhouse', url: 'https://productiveplayhouse.applytojob.com/apply/', paths: /\/apply\/[a-z0-9]{6,}(?:\/[^/]*)?$/i },
   { platform: 'iMerit', url: 'https://imerit.ai/careers-listing/', paths: /\/careers-listing\/?$/i, queryParam: 'job' },
   { platform: 'Meridial', url: 'https://www.meridial.ai/projects', paths: /\/(projects|opportunities|jobs?)\/[^/]+/i },
-  { platform: 'SME Careers', url: 'https://sme.careers/jobs/', paths: /\/(jobs?|opportunities)\/[^/]+/i },
-  { platform: 'CACTUS', url: 'https://jobs.cactusglobal.com/jobs', paths: /\/(jobs?|job)\/[^/]+/i, pages: 20 },
 ];
 
 function isCandidate(href, title, source) {
@@ -137,4 +134,12 @@ try {
 } finally {
   await browser.close();
 }
-if (failed.length) throw new Error('Gagal untuk: ' + failed.join(', '));
+if (failed.length) {
+  const message = 'Source tidak diperbarui (data lama dipertahankan): ' + failed.join(', ');
+  console.warn('PERINGATAN:', message);
+  if (process.env.GITHUB_ACTIONS) console.log('::warning title=Partial source refresh::' + message);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const { appendFile } = await import('node:fs/promises');
+    await appendFile(process.env.GITHUB_STEP_SUMMARY, '\n## Additional source warnings\n\n' + failed.map((name) => '- ' + name).join('\n') + '\n\nFailed sources were left untouched; old records were not closed.\n');
+  }
+}
