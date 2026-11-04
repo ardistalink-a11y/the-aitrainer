@@ -15,6 +15,7 @@ const COUNTRY_ALIASES = [
   [/\bUK\b/i, 'GB'],
   [/\bUnited Kingdom\b/i, 'GB'],
   [/\bUAE\b/i, 'AE'],
+  [/\bBrasil\b/i, 'BR'],
 ];
 
 const CITY_COUNTRY = new Map();
