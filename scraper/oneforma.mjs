@@ -1,19 +1,12 @@
 // OneForma: halaman /projects/ dirender di server, ada tombol Next.
 import * as cheerio from 'cheerio';
+import { getNames } from 'i18n-iso-countries';
 import { getHtml, textParts, clean, sleep, savePlatform } from './common.mjs';
 
 const START = 'https://www.oneforma.com/projects/';
 const MAX_PAGES = 20;
 
-const COUNTRIES = [
-  'Australia', 'Austria', 'Azerbaijan', 'Belgium', 'Brazil', 'Bulgaria', 'Canada', 'Chile', 'China',
-  'Colombia', 'Croatia', 'Czech Republic', 'Denmark', 'Egypt', 'Finland', 'France', 'Germany', 'Greece',
-  'Hong Kong', 'India', 'Indonesia', 'Ireland', 'Israel', 'Italy', 'Japan', 'Jordan', 'Kenya', 'Lebanon',
-  'Malaysia', 'Mexico', 'Morocco', 'Netherlands', 'New Zealand', 'Norway', 'Palestine', 'Poland',
-  'Portugal', 'Remote', 'Romania', 'Russia', 'Saudi Arabia', 'Serbia', 'Singapore', 'Slovakia',
-  'Slovenia', 'South Africa', 'South Korea', 'Spain', 'Sweden', 'Switzerland', 'Syria', 'Taiwan',
-  'Thailand', 'Turkey', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uzbekistan', 'Vietnam',
-];
+const COUNTRIES = [...Object.values(getNames('en')), 'Remote'];
 const ALT = [...COUNTRIES]
   .sort((a, b) => b.length - a.length)
   .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
