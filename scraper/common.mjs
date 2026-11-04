@@ -93,9 +93,11 @@ function cityCountryCodes(raw) {
 
     const pieces = value.split(',').map((piece) => piece.trim());
     const suffix = (pieces.at(-1) || '').toUpperCase().replace(/\./g, '');
-    if (pieces.length > 1 && US_STATES.has(suffix)) found.add('US');
-    if (pieces.length > 1 && CA_PROVINCES.has(suffix)) found.add('CA');
-    if (pieces.length > 1) {
+    const usSuffix = pieces.length > 1 && US_STATES.has(suffix);
+    const caSuffix = pieces.length > 1 && CA_PROVINCES.has(suffix);
+    if (usSuffix) found.add('US');
+    if (caSuffix) found.add('CA');
+    if (pieces.length > 1 && !usSuffix && !caSuffix) {
       const city = normalizeKey(pieces[0]);
       if (CITY_COUNTRY.has(city)) found.add(CITY_COUNTRY.get(city));
     }
