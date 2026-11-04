@@ -1,4 +1,5 @@
 import countries from 'i18n-iso-countries';
+import { CountryStateCity } from '@tansuasici/country-state-city';
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.SUPABASE_URL;
@@ -8,6 +9,9 @@ if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY belum diis
 export const db = createClient(url, key);
 
 const COUNTRY_NAMES = Object.entries(countries.getNames('en'));
+const ALL_COUNTRY_CODES = COUNTRY_NAMES.map(([code]) => code);
+const EUROPE_COUNTRY_CODES = 'AD AL AT BA BE BG BY CH CY CZ DE DK EE ES FI FR GB GR HR HU IE IS IT LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SK SM UA VA'.split(' ');
+
 const COUNTRY_ALIASES = [
   [/\bUSA\b/i, 'US'],
   [/U\.S\./i, 'US'],
@@ -18,7 +22,7 @@ const COUNTRY_ALIASES = [
   [/\bBrasil\b/i, 'BR'],
 ];
 
-const CITY_COUNTRY = new Map();
+const CITY_COUNTRY_OVERRIDES = new Map();
 for (const [code, names] of Object.entries({
   DE: 'Aalen|Augsburg|Baden-Baden|Bamberg|Bayreuth|Berlin|Erfurt|Frankfurt|Freiburg|Freiburg im Breisgau|Hamburg|Heidelberg|Kaiserslautern|Karlsruhe|Kassel|Koblenz|Landshut|Mainz|Marburg|Munich|München|Passau|Regensburg|Reutlingen|Stuttgart|Trier|Würzburg|Wiesbaden|Pforzheim|Villingen-Schwenningen|Weiden in der Oberpfalz|Albstadt|Heilbronn|Idar-Oberstein|Bad Kreuznach|Lichtenfels|Suhl|Ulm|Ehingen|Münster|Gera|Nuremberg|Bad Mergentheim|Leipzig|Schwäbisch Gmünd|Schwäbisch Hall|Steinau an der Straße|Rosenheim|Cologne|Ingolstadt|Siegen|Neubrandenburg|Aachen|Bad Hersfeld|Oldenburg|Mannheim|Kindsbach|Dresden|Hannover|Essen|Halle (Saale)|Dortmund|Rostock|Chemnitz|Bremen|Bochum|Bonn|Ansbach',
   US: 'Atlanta|Austin|Boston|Chicago|Cincinnati|Columbus|Dallas|Houston|Indianapolis|Las Vegas|Los Angeles|Louisville|Miami|Nashville|New Orleans|New York|Orlando|Philadelphia|Phoenix|Palo Alto|San Diego|San Francisco|Seattle|Tampa|Washington|Mountain View|Sunnyvale|Redmond|Burlingame',
@@ -70,7 +74,20 @@ for (const [code, names] of Object.entries({
   MD: 'Chișinău|Bălți',
   HR: 'Zagreb',
 })) {
-  for (const name of names.split('|')) CITY_COUNTRY.set(normalizeKey(name), code);
+  for (const name of names.split('|')) CITY_COUNTRY_OVERRIDES.set(normalizeKey(name), code);
+}
+
+const CITY_COUNTRIES = new Map();
+for (const country of CountryStateCity.getAllCountries()) {
+  const code = country.iso2;
+  if (!code) continue;
+  for (const city of CountryStateCity.getCitiesByCountryId(country.id) || []) {
+    const key = normalizeKey(city.name);
+    if (!key) continue;
+    const matches = CITY_COUNTRIES.get(key) || new Set();
+    matches.add(code);
+    CITY_COUNTRIES.set(key, matches);
+  }
 }
 
 const US_STATES = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
@@ -84,23 +101,32 @@ function normalizeKey(value) {
 const normalizeCountryText = (value) =>
   value.toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
+function cityCountryCode(value) {
+  const key = normalizeKey(value);
+  const override = CITY_COUNTRY_OVERRIDES.get(key);
+  if (override) return override;
+  const matches = CITY_COUNTRIES.get(key);
+  return matches?.size === 1 ? [...matches][0] : null;
+}
+
 function cityCountryCodes(raw) {
   const found = new Set();
-  const text = String(raw || '');
-  for (const part of text.split(/[\/;|]+/)) {
-    const value = part.trim();
-    const normalized = normalizeKey(value);
-    if (CITY_COUNTRY.has(normalized)) found.add(CITY_COUNTRY.get(normalized));
-
-    const pieces = value.split(',').map((piece) => piece.trim());
-    const suffix = (pieces.at(-1) || '').toUpperCase().replace(/\./g, '');
+  for (const part of String(raw || '').split(/[\\/;|]+/)) {
+    const pieces = part.split(',').map((piece) => piece.trim()).filter(Boolean);
+    const suffix = (pieces.at(-1) || '').toUpperCase().replace(/\\./g, '');
     const usSuffix = pieces.length > 1 && US_STATES.has(suffix);
     const caSuffix = pieces.length > 1 && CA_PROVINCES.has(suffix);
-    if (usSuffix) found.add('US');
-    if (caSuffix) found.add('CA');
-    if (pieces.length > 1 && !usSuffix && !caSuffix) {
-      const city = normalizeKey(pieces[0]);
-      if (CITY_COUNTRY.has(city)) found.add(CITY_COUNTRY.get(city));
+    if (usSuffix) {
+      found.add('US');
+      continue;
+    }
+    if (caSuffix) {
+      found.add('CA');
+      continue;
+    }
+    for (const candidate of new Set([part.trim(), pieces[0]].filter(Boolean))) {
+      const code = cityCountryCode(candidate);
+      if (code) found.add(code);
     }
   }
   return [...found];
@@ -109,7 +135,13 @@ function cityCountryCodes(raw) {
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const normalized = ' ' + normalizeCountryText(text) + ' ';
+  if (/(\\bworldwide\\b|\\bglobal\\b|\\banywhere\\b|\\ball countries\\b)/i.test(text)) {
+    return ALL_COUNTRY_CODES;
+  }
   const found = new Set(cityCountryCodes(text));
+  if (/\\bEurope\\b/i.test(text)) {
+    for (const code of EUROPE_COUNTRY_CODES) found.add(code);
+  }
   for (const [pattern, code] of COUNTRY_ALIASES) {
     if (pattern.test(text)) found.add(code);
   }
