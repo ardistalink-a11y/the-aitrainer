@@ -1,4 +1,4 @@
-import { getNames } from 'i18n-iso-countries';
+import countries from 'i18n-iso-countries';
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.SUPABASE_URL;
@@ -7,31 +7,28 @@ if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY belum diis
 
 export const db = createClient(url, key);
 
-
-const COUNTRY_NAMES = Object.entries(getNames('en')).sort((a, b) => b[1].length - a[1].length);
+const COUNTRY_NAMES = Object.entries(countries.getNames('en')).sort((a, b) => b[1].length - a[1].length);
 const COUNTRY_ALIASES = [
-  [/(^|[^A-Z])USA([^A-Z]|$)/i, 'US'], [/U\\.S\\./i, 'US'], [/\\bUNITED STATES\\b/i, 'US'],
-  [/\\bUK\\b/i, 'GB'], [/\\bUNITED KINGDOM\\b/i, 'GB'], [/\\bUAE\\b/i, 'AE'],
+  [/(^|[^A-Z])USA([^A-Z]|$)/i, 'US'],
+  [/U\.S\./i, 'US'],
+  [/\bUNITED STATES\b/i, 'US'],
+  [/\bUK\b/i, 'GB'],
+  [/\bUNITED KINGDOM\b/i, 'GB'],
+  [/\bUAE\b/i, 'AE'],
 ];
 
 export function extractCountryCodes(raw) {
   const text = String(raw || '');
   const found = new Set();
-  for (const [pattern, code] of COUNTRY_ALIASES) if (pattern.test(text)) found.add(code);
-  for (const [code, name] of COUNTRY_NAMES) {
-    const pattern = name.split(/([^\\p{L}\\p{N}]+)/u).map((part) =>
-      /^[\\p{L}\\p{N}]+$/u.test(part) ? part : '\\W+'
-    ).join('');
-    if (new RegExp('(^|[^\\p{L}])' + pattern + '([^\\p{L}]|$)', 'iu').test(text)) found.add(code);
-  }
-  return [...found];
-}
-
-export const UA =') + '([^A-Z]|$)', 'i').test(text)) found.add(code);
+  for (const [pattern, code] of COUNTRY_ALIASES) {
+    if (pattern.test(text)) found.add(code);
   }
   for (const [code, name] of COUNTRY_NAMES) {
-    const escaped = name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\export const UA =');
-    if (new RegExp('(^|[^\\p{L}])' + escaped + '([^\\p{L}]|$)', 'iu').test(text)) found.add(code);
+    const pattern = name
+      .split(/([^\p{L}\p{N}]+)/u)
+      .map((part) => (/^[\p{L}\p{N}]+$/u.test(part) ? part : '\\W+'))
+      .join('');
+    if (new RegExp('(^|[^\p{L}])' + pattern + '([^\p{L}]|$)', 'iu').test(text)) found.add(code);
   }
   return [...found];
 }
@@ -40,16 +37,14 @@ export const UA = 'Mozilla/5.0 (compatible; TheAITrainerBot/1.0; +https://theait
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
-// Ambil HTML satu halaman
 export async function getHtml(pageUrl) {
   const res = await fetch(pageUrl, {
     headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} untuk ${pageUrl}`);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' untuk ' + pageUrl);
   return res.text();
 }
 
-// Kumpulkan potongan teks dari sebuah elemen, urut sesuai halaman
 export function textParts(node, out = []) {
   if (!node) return out;
   if (node.type === 'text') {
@@ -61,23 +56,20 @@ export function textParts(node, out = []) {
   return out;
 }
 
-// Menebak apakah proyek terbuka untuk Indonesia dari teks lokasi.
-// indonesia | worldwide | excluded | unknown
 export function classifyIndonesia(raw) {
   const t = (raw || '').toLowerCase().trim();
   if (!t) return 'unknown';
   if (/\bindonesia\b/.test(t)) return 'indonesia';
   if (/(worldwide|global|anywhere|all countries)/.test(t)) return 'worldwide';
-  if (/\+\s*\d+\s*more/.test(t)) return 'unknown'; // daftar terpotong
+  if (/\+\s*\d+\s*more/.test(t)) return 'unknown';
   if (t.split(/[\/;|]/).some((s) => s.trim() === 'remote')) return 'unknown';
   if (t === 'remote') return 'unknown';
   return 'excluded';
 }
 
-// Simpan hasil satu platform: tambah/update yang ada, tutup yang sudah hilang.
 export async function savePlatform(platform, items) {
   if (items.length === 0) {
-    throw new Error(`${platform}: 0 proyek terbaca, data lama tidak diubah`);
+    throw new Error(platform + ': 0 proyek terbaca, data lama tidak diubah');
   }
   const runStart = new Date().toISOString();
   const unique = new Map(items.map((i) => [i.source_url, i]));
@@ -110,5 +102,5 @@ export async function savePlatform(platform, items) {
     .select('id');
   if (closed.error) throw closed.error;
 
-  console.log(`${platform}: ${rows.length} proyek disimpan, ${closed.data.length} ditandai closed`);
+  console.log(platform + ': ' + rows.length + ' proyek disimpan, ' + closed.data.length + ' ditandai closed');
 }
