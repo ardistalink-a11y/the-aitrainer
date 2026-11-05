@@ -185,7 +185,7 @@ async function scrapeMeridial() {
   const items = jobs.map((job) => {
     const rawLocation = clean(job.location?.name || (job.offices || []).map((office) => office.location || office.name).filter(Boolean).join(', ')) || null;
     const content = clean(decodeHtml(job.content || '').replace(/<[^>]+>/g, ' '));
-    const pay = content.match(/(?:\\$|USD\\s*)\\s*[\\d,.]+(?:\\s*(?:-?\\s*to\\s*-?|[-–])\\s*(?:\\$|USD\\s*)?\\s*[\\d,.]+)?\\s*(?:per|\\/)\\s*(?:hour|hr|month|task)/i)?.[0] || null;
+    const pay = content.match(/(?:[$]|\bUSD\b)\s*\d[\d,.]*(?:\s*(?:-?\s*to\s*-?|to|[-–])\s*(?:[$]|\bUSD\b)?\s*\d[\d,.]*)?\s*(?:per|\/)\s*(?:hour|hr|month|task)/i)?.[0] || null;
     const departments = Array.isArray(job.departments) ? job.departments.map((department) => department.name).filter(Boolean) : [];
     const sourceUrl = 'https://job-boards.eu.greenhouse.io/agency/jobs/' + encodeURIComponent(job.id);
     return {
