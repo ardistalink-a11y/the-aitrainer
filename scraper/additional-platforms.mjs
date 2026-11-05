@@ -5,7 +5,6 @@ import { clean, extractCountryCodes, savePlatform, sleep } from './common.mjs';
 const SOURCES = [
   { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
   { platform: 'Productive Playhouse', url: 'https://productiveplayhouse.applytojob.com/apply/', paths: /\/apply\/[a-z0-9]{6,}(?:\/[^/]*)?$/i },
-  { platform: 'Meridial', url: 'https://www.meridial.ai/projects', paths: /\/(projects|opportunities|jobs?)\/[^/]+/i },
 ];
 
 function isCandidate(href, title, source) {
