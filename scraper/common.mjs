@@ -185,7 +185,7 @@ export function classifyIndonesia(raw) {
   return 'excluded';
 }
 
-export async function savePlatform(platform, items) {
+export async function savePlatform(platform, items, { closeMissing = true } = {}) {
   if (items.length === 0) {
     throw new Error(platform + ': 0 proyek terbaca, data lama tidak diubah');
   }
@@ -211,14 +211,18 @@ export async function savePlatform(platform, items) {
     if (up.error) throw up.error;
   }
 
-  const closed = await db
-    .from('projects')
-    .update({ status: 'closed' })
-    .eq('platform', platform)
-    .eq('status', 'open')
-    .lt('last_seen', runStart)
-    .select('id');
-  if (closed.error) throw closed.error;
+  if (closeMissing) {
+    const closed = await db
+      .from('projects')
+      .update({ status: 'closed' })
+      .eq('platform', platform)
+      .eq('status', 'open')
+      .lt('last_seen', runStart)
+      .select('id');
+    if (closed.error) throw closed.error;
 
-  console.log(platform + ': ' + rows.length + ' proyek disimpan, ' + closed.data.length + ' ditandai closed');
+    console.log(platform + ': ' + rows.length + ' proyek disimpan, ' + closed.data.length + ' ditandai closed');
+  } else {
+    console.log(platform + ': ' + rows.length + ' proyek disimpan sebagian; listing lain tetap dipertahankan');
+  }
 }
