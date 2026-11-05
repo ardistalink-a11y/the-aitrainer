@@ -35,10 +35,10 @@ jobs:
       - name: Install browser
         if: always()
         run: npx playwright install --with-deps chromium
-      - name: Public job feeds (Micro1, REX, SME Careers, CACTUS, Meridial)
+      - name: Public job feeds (Micro1, REX, SME Careers, CACTUS)
         if: always()
         run: node public-feeds.mjs
-      - name: Additional platforms
+      - name: Additional platforms (Meridial, iMerit, Alignerr, Productive Playhouse)
         if: always()
         run: node additional-platforms.mjs
       - name: Outlier
