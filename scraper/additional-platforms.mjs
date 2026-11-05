@@ -86,11 +86,11 @@ function decodeHtml(value) {
 
 function normalizeAlignerrTitle(value) {
   let title = clean(value)
-    .replace(/\\s+(?:USD\\s*)?[$€£]\\s*[\\d,.]+[\\s\\S]*$/i, '')
-    .replace(/\\s+(?:Remote\\s+)?Apply(?:\\s+Now)?$/i, '');
-  const description = title.match(/\\s+(?=(?:Put your|Use your|We['’]re looking|We are looking|Alignerr is|As a |Join our|In this role|You will|We need|Our client|Help us|Are you|The ideal|This role|What if|Looking for|Native\\b|Fluent in\\b))/i);
+    .replace(/\s+(?:USD\s*)?[$€£]\s*[\d,.]+[\s\S]*$/i, '')
+    .replace(/\s+(?:Remote\s+)?Apply(?:\s+Now)?$/i, '');
+  const description = title.match(/\s+(?=(?:Put your|Use your|We['’]re looking|We are looking|Alignerr is|As a |Join our|In this role|You will|We need|Our client|Help us|Are you|The ideal|This role|What if|Looking for|Native\b|Fluent in\b))/i);
   if (description && description.index > 20) title = title.slice(0, description.index);
-  if (title.length > 150) title = title.slice(0, 147).replace(/\\s+\\S*$/, '').trim() + '…';
+  if (title.length > 150) title = title.slice(0, 147).replace(/\s+\S*$/, '').trim() + '…';
   return title;
 }
 
@@ -111,7 +111,7 @@ async function addAlignerrDetailTitles(jobs, source) {
         });
         if (!response.ok) return null;
         const html = await response.text();
-        const heading = html.match(/<h1\\b[^>]*>([\\s\\S]*?)<\\/h1>/i);
+        const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
         if (!heading) return null;
         const title = clean(decodeHtml(heading[1].replace(/<[^>]*>/g, ' ')));
         return title.length > 5 && title.length <= 180 && !/^alignerr$/i.test(title) ? title : null;
