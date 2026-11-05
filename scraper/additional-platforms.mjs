@@ -186,17 +186,141 @@ function toItem(job, source) {
   };
 }
 
+async function scrapeMeridial(page) {
+  const url = 'https://www.meridial.ai/projects';
+  const jobs = new Map();
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(1800);
+
+  let loadedAll = false;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const cards = await page.evaluate(() => {
+      const selector = 'a[href*="greenhouse.io/agency/jobs/"]';
+      return [...document.querySelectorAll(selector)].map((anchor) => {
+        let card = anchor;
+        let parent = anchor.parentElement;
+        for (let level = 0; level < 10 && parent; level++, parent = parent.parentElement) {
+          if (parent.querySelectorAll(selector).length !== 1) break;
+          const text = (parent.innerText || '').trim();
+          if (!text || text.length > 2400) break;
+          card = parent;
+        }
+        const heading = card.querySelector('h1,h2,h3,h4,[class*="title"]');
+        return {
+          href: anchor.href,
+          title: (heading?.innerText || anchor.innerText || anchor.getAttribute('aria-label') || '').trim(),
+          text: (card.innerText || anchor.innerText || '').trim(),
+        };
+      });
+    });
+
+    for (const card of cards) {
+      const title = clean(card.title).replace(/\s+(?:FEATURED\s+)?(?:Language\s*&\s*Linguistics|Sciences|Coding|Engineering|Finance|Mathematics|Computer Science|Medical Science)\b[\s\S]*$/i, '');
+      if (!title || title.length < 5) continue;
+      try {
+        const sourceUrl = new URL(card.href);
+        sourceUrl.hash = '';
+        if (!/greenhouse\.io$/i.test(sourceUrl.hostname) || !/^\/agency\/jobs\/\d+/.test(sourceUrl.pathname)) continue;
+        const href = sourceUrl.href;
+        if (!jobs.has(href)) jobs.set(href, { title, text: clean(card.text), href });
+      } catch {}
+    }
+
+    const more = page.getByText(/show more|load more/i).last();
+    if (!(await more.count())) {
+      loadedAll = true;
+      break;
+    }
+
+    const before = await page.locator('a[href*="greenhouse.io/agency/jobs/"]').count();
+    await more.scrollIntoViewIfNeeded();
+    await more.click({ timeout: 10000 });
+    await page.waitForTimeout(700);
+    let after = await page.locator('a[href*="greenhouse.io/agency/jobs/"]').count();
+    if (after <= before) {
+      await page.waitForTimeout(1400);
+      after = await page.locator('a[href*="greenhouse.io/agency/jobs/"]').count();
+      if (after <= before) throw new Error('Tombol SHOW MORE tidak memuat project tambahan');
+    }
+  }
+
+  if (!loadedAll) throw new Error('Daftar Meridial belum selesai dimuat dari halaman resmi');
+  const items = [...jobs.values()].map((job) => {
+    const codes = extractCountryCodes(job.text);
+    const worldwide = /\b(worldwide|global|all countries|anywhere)\b/i.test(job.text);
+    const locations = worldwide
+      ? ['Worldwide']
+      : codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
+    const remote = /\bremote\b/i.test(job.text);
+    const rawLocation = worldwide
+      ? 'Worldwide'
+      : [...(remote ? ['Remote'] : []), ...locations].filter((value, index, all) => all.indexOf(value) === index).join(' / ') || null;
+    const pay = job.text.match(/(?:[$]|USD\s*)\s*\d[\d,.]*(?:\s*(?:-|to|–)\s*(?:[$]|USD\s*)?\s*\d[\d,.]*)?\s*(?:per|\/)\s*(?:hour|hr|month|task)/i)?.[0] || null;
+    return {
+      project_name: job.title,
+      task_type: null,
+      country: rawLocation,
+      raw_location: rawLocation,
+      country_codes: codes,
+      pay: clean(pay) || null,
+      source_url: job.href,
+    };
+  }).filter((item) => item.project_name && item.source_url);
+
+  if (!items.length) throw new Error('Tidak ada project yang terbaca di halaman resmi Meridial');
+  await savePlatform('Meridial', items);
+  console.log('Meridial: ' + items.length + ' project diverifikasi dari halaman resmi; tautan apply berasal dari kartu project Meridial');
+}
+
 async function scrapeImerit(page) {
   const url = 'https://imerit.ai/careers-listing/';
   const items = [];
-  let buttonCount = 0;
   let failedButtons = 0;
-  for (let index = 0; index < 100; index++) {
+  let loadMoreFailed = false;
+  let listingComplete = false;
+  let finalButtonCount = 0;
+  let reachedEnd = false;
+
+  for (let index = 0; index < 200; index++) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForTimeout(1200);
-    const buttons = page.getByText(/view role/i);
-    buttonCount = await buttons.count();
-    if (index >= buttonCount) break;
+    await page.waitForTimeout(1000);
+    let buttons = page.getByText(/view role/i);
+    let buttonCount = await buttons.count();
+    let expansionAttempts = 0;
+
+    while (index >= buttonCount && expansionAttempts < 40) {
+      const more = page.getByText(/show more|load more/i).last();
+      if (!(await more.count())) {
+        listingComplete = true;
+        break;
+      }
+
+      try {
+        await more.scrollIntoViewIfNeeded();
+        await more.click({ timeout: 8000 });
+        await page.waitForTimeout(600);
+      } catch {
+        loadMoreFailed = true;
+        break;
+      }
+
+      const expandedCount = await page.getByText(/view role/i).count();
+      if (expandedCount <= buttonCount) {
+        loadMoreFailed = true;
+        break;
+      }
+      buttonCount = expandedCount;
+      buttons = page.getByText(/view role/i);
+      expansionAttempts++;
+    }
+
+    finalButtonCount = buttonCount;
+    if (index >= buttonCount) {
+      if (!loadMoreFailed && !(await page.getByText(/show more|load more/i).count())) listingComplete = true;
+      reachedEnd = true;
+      break;
+    }
+
     const button = buttons.nth(index);
     const card = await button.evaluate((element) => {
       let current = element;
@@ -220,21 +344,39 @@ async function scrapeImerit(page) {
       }
       return { title: bestTitle, text: bestText || (best.innerText || '').trim(), href, id };
     });
-    const before = page.url();
+
+    let clicked = false;
     try {
       await button.click({ timeout: 5000 });
       await page.waitForTimeout(500);
-    } catch {
+      clicked = true;
+    } catch {}
+
+    let currentUrl = new URL(page.url());
+    let sourceUrl = currentUrl.searchParams.has('job') ? currentUrl.href : '';
+    if (!sourceUrl && card.href) {
+      try {
+        const candidate = new URL(card.href, url);
+        if (candidate.searchParams.has('job')) sourceUrl = candidate.href;
+      } catch {}
+    }
+    if (!sourceUrl && card.id) sourceUrl = url + '?job=' + encodeURIComponent(card.id);
+    if (!sourceUrl) {
       failedButtons++;
       continue;
     }
-    const currentUrl = new URL(page.url());
-    let sourceUrl = currentUrl.searchParams.has('job') ? currentUrl.href : '';
-    if (!sourceUrl && card.href) {
-      const candidate = new URL(card.href, url);
-      if (candidate.searchParams.has('job')) sourceUrl = candidate.href;
+
+    if (!currentUrl.searchParams.has('job') || currentUrl.href !== sourceUrl) {
+      try {
+        await page.goto(sourceUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.waitForTimeout(500);
+      } catch {
+        failedButtons++;
+        continue;
+      }
     }
-    if (!sourceUrl && card.id) sourceUrl = url + '?job=' + encodeURIComponent(card.id);
+
+    currentUrl = new URL(page.url());
     const detailText = (await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
     const detailTitle = await page.locator('h1,h2').first().innerText().catch(() => '');
     const projectName = [card.title, detailTitle]
@@ -246,27 +388,37 @@ async function scrapeImerit(page) {
     const rawLocation = clean(location) || (/\bremote\b/i.test(detailText + ' ' + card.text) ? 'Remote' : null);
     const pay = detailText.match(/(?:USD|EUR|GBP|INR|BDT)?\s*\$?\s*[\d,.]+\s*(?:[-–]\s*(?:USD|EUR|GBP|INR|BDT)?\s*\$?\s*[\d,.]+)?\s*\/\s*(?:hour|hr|month|task)/i)?.[0] || null;
     const jobId = currentUrl.searchParams.get('job');
-    if (sourceUrl && projectName && jobId && page.url() !== before) {
-      const codes = extractCountryCodes(rawLocation);
+    if (sourceUrl && projectName && jobId) {
       items.push({
         project_name: projectName,
         task_type: null,
         country: rawLocation,
         raw_location: rawLocation,
-        country_codes: codes,
+        country_codes: extractCountryCodes(rawLocation),
         pay: clean(pay) || null,
         source_url: sourceUrl,
       });
     } else {
       failedButtons++;
     }
+
+    if (!clicked && !jobId) failedButtons++;
   }
-  if (failedButtons) {
-    throw new Error(failedButtons + ' dari ' + buttonCount + ' kartu gagal dibaca; data iMerit lama dipertahankan');
+
+  if (!reachedEnd && items.length >= 200) loadMoreFailed = true;
+  if (!items.length) throw new Error('Tidak ada detail lowongan iMerit yang berhasil dibaca');
+  const completeRefresh = reachedEnd && listingComplete && !failedButtons && !loadMoreFailed;
+  await savePlatform('iMerit', items, { closeMissing: completeRefresh });
+
+  const message = 'iMerit: ' + items.length + ' listing disimpan dari ' + finalButtonCount + ' kartu';
+  if (completeRefresh) {
+    console.log(message + '; refresh lengkap');
+  } else {
+    const detail = failedButtons ? failedButtons + ' kartu gagal' : loadMoreFailed ? 'sebagian daftar tidak termuat' : 'refresh belum lengkap';
+    const warning = message + '; ' + detail + ', listing lain tetap dipertahankan';
+    console.warn(warning);
+    if (process.env.GITHUB_ACTIONS) console.log('::warning title=iMerit partial scrape::' + warning);
   }
-  if (!items.length) throw new Error('Klik View role tidak menghasilkan URL detail dengan parameter job');
-  await savePlatform('iMerit', items);
-  console.log('iMerit: ' + items.length + ' listing disimpan dari ' + buttonCount + ' kartu');
 }
 
 const browser = await chromium.launch();
