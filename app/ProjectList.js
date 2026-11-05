@@ -28,6 +28,14 @@ const ROLES = {
   'Operations & Coordination': ['coordinator', 'operations', 'manager'],
 };
 
+function formatLocation(value) {
+  return String(value)
+    .split(/\s*\/\s*|\s*[,;|•]\s*|\s+[–—-]\s+|\s*[\r\n]+\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' / ');
+}
+
 function pageList(cur, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const s = new Set([1, total, cur - 1, cur, cur + 1]);
@@ -369,7 +377,7 @@ export default function ProjectList() {
           {rows.map((p) => {
             const m = marks[p.id] || 'none';
             const closed = p.status !== 'open';
-            const loc = p.raw_location || p.country || '';
+            const loc = formatLocation(p.raw_location || p.country || '');
             return (
               <li key={p.id} className={`card${closed ? ' closed' : ''}`}>
                 <span className="platform">{p.platform}</span>
