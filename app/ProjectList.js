@@ -370,7 +370,6 @@ export default function ProjectList() {
             const m = marks[p.id] || 'none';
             const closed = p.status !== 'open';
             const loc = p.raw_location || p.country || '';
-            const chips = [p.task_type, p.language, p.pay].filter(Boolean);
             return (
               <li key={p.id} className={`card${closed ? ' closed' : ''}`}>
                 <span className="platform">{p.platform}</span>
@@ -383,13 +382,6 @@ export default function ProjectList() {
                   <p className="loc" title={loc}>
                     {loc}
                   </p>
-                ) : null}
-                {chips.length ? (
-                  <div className="chips">
-                    {chips.map((x) => (
-                      <span key={x}>{x}</span>
-                    ))}
-                  </div>
                 ) : null}
                 <div className="foot-row">
                   {closed ? (

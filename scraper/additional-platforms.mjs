@@ -3,7 +3,7 @@ import countries from 'i18n-iso-countries';
 import { clean, extractCountryCodes, savePlatform, sleep } from './common.mjs';
 
 const SOURCES = [
-  { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i },
+  { platform: 'Alignerr', url: 'https://www.alignerr.com/jobs', paths: /\/jobs?\/[^/]+/i, titleFromDetail: 'h1' },
   { platform: 'Productive Playhouse', url: 'https://productiveplayhouse.applytojob.com/apply/', paths: /\/apply\/[a-z0-9]{6,}(?:\/[^/]*)?$/i },
 ];
 
@@ -72,6 +72,61 @@ async function collectPage(page, source) {
   return [...jobs.values()];
 }
 
+function decodeHtml(value) {
+  return value
+    .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code) => {
+      const point = code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : parseInt(code, 10);
+      return Number.isFinite(point) ? String.fromCodePoint(point) : _;
+    })
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+}
+
+function normalizeAlignerrTitle(value) {
+  let title = clean(value)
+    .replace(/\s+(?:USD\s*)?[$€£]\s*[\d,.]+[\s\S]*$/i, '')
+    .replace(/\s+(?:Remote\s+)?Apply(?:\s+Now)?$/i, '');
+  const description = title.match(/\s+(?=(?:Put your|Use your|We['’]re looking|We are looking|Alignerr is|As a |Join our|In this role|You will|We need|Our client|Help us|Are you|The ideal|This role|What if|Looking for|Native\b|Fluent in\b))/i);
+  if (description && description.index > 20) title = title.slice(0, description.index);
+  if (title.length > 150) title = title.slice(0, 147).replace(/\s+\S*$/, '').trim() + '…';
+  return title;
+}
+
+async function addAlignerrDetailTitles(jobs, source) {
+  if (source.titleFromDetail !== 'h1') return jobs;
+  const titled = [];
+  const batchSize = 12;
+  for (let start = 0; start < jobs.length; start += batchSize) {
+    const batch = jobs.slice(start, start + batchSize);
+    const details = await Promise.all(batch.map(async (job) => {
+      try {
+        const response = await fetch(job.href, {
+          headers: {
+            accept: 'text/html,application/xhtml+xml',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
+          },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) return null;
+        const html = await response.text();
+        const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+        if (!heading) return null;
+        const title = clean(decodeHtml(heading[1].replace(/<[^>]*>/g, ' ')));
+        return title.length > 5 && title.length <= 180 && !/^alignerr$/i.test(title) ? title : null;
+      } catch {
+        return null;
+      }
+    }));
+    batch.forEach((job, index) => titled.push({
+      ...job,
+      title: details[index] || normalizeAlignerrTitle(job.title),
+    }));
+  }
+  return titled;
+}
+
 async function scrapeSource(page, source) {
   const all = new Map();
   const maxPages = source.pages || 1;
@@ -80,7 +135,7 @@ async function scrapeSource(page, source) {
     if (source.pages) url.searchParams.set('page', String(n));
     await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(1800);
-    const jobs = await collectPage(page, source);
+    const jobs = await addAlignerrDetailTitles(await collectPage(page, source), source);
     if (!jobs.length && n === 1) break;
     if (!jobs.length && n > 1) break;
     for (const job of jobs) all.set(job.href, job);
