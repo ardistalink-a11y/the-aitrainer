@@ -144,11 +144,36 @@ async function scrapeSource(page, source) {
   return [...all.values()];
 }
 
+const PRODUCTIVE_PLAYHOUSE_TITLE_COUNTRY_HINTS = [
+  [/\bKorean\b/i, 'KR'],
+  [/\bTurkish\b/i, 'TR'],
+  [/\bEgyptian Arabic\b/i, 'EG'],
+  [/\bFrench\b/i, 'FR'],
+  [/\bGujarati\b/i, 'IN'],
+  [/\bThai\b/i, 'TH'],
+  [/\bIndonesian\b/i, 'ID'],
+  [/\bArmenian\b/i, 'AM'],
+];
+
+function inferProductivePlayhouseCountryCodes(title) {
+  const explicit = extractCountryCodes(title);
+  if (explicit.length) return explicit;
+
+  const matches = PRODUCTIVE_PLAYHOUSE_TITLE_COUNTRY_HINTS
+    .filter(([pattern]) => pattern.test(title))
+    .map(([, code]) => code);
+  return matches.length === 1 ? matches : [];
+}
+
 function toItem(job, source) {
   const detectedCodes = extractCountryCodes(job.text);
-  const codes = detectedCodes;
+  const titleCodes = source.platform === 'Productive Playhouse'
+    ? inferProductivePlayhouseCountryCodes(job.title)
+    : [];
+  const codes = [...new Set([...detectedCodes, ...titleCodes])];
   const locations = codes.map((code) => countries.getName(code, 'en')).filter(Boolean);
   if (!locations.length && /\bremote\b/i.test(job.text)) locations.push('Remote');
+  else if (titleCodes.length && /\bremote\b/i.test(job.text)) locations.unshift('Remote');
   const pay = job.text.match(/(?:[$€£]\s?[\d,.]+(?:\s?[-–]\s?[$€£]?\s?[\d,.]+)?\s*(?:\/\s*(?:hr|hour|task|project))?)/i)?.[0] ?? null;
   return {
     project_name: job.title,
