@@ -276,5 +276,5 @@ await run('SME Careers', scrapeSme);
 await run('CACTUS', scrapeCactus);
 
 if (process.env.GITHUB_STEP_SUMMARY) {
-  await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1 and REX are fetched from public sitemaps or page payloads; SME Careers and CACTUS are fetched from public JSON job endpoints. Check this step’s warnings for any source that did not refresh.\n');
+  await appendFile(process.env.GITHUB_STEP_SUMMARY, '## Public job feeds\n\nMicro1 and REX are fetched from public sitemaps or page payloads; SME Careers and CACTUS use public JSON feeds; Meridial uses the public Greenhouse Job Board API. Check this step’s warnings for any source that did not refresh.\n');
 }
