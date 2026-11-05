@@ -177,6 +177,34 @@ async function scrapeCactus() {
   console.log('CACTUS: ' + items.length + ' listing disimpan');
 }
 
+async function scrapeMeridial() {
+  const payload = await getJson('https://boards-api.greenhouse.io/v1/boards/agency/jobs?content=true');
+  const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+  if (!jobs.length) throw new Error('Greenhouse API mengembalikan 0 lowongan');
+
+  const items = jobs.map((job) => {
+    const rawLocation = clean(job.location?.name || (job.offices || []).map((office) => office.location || office.name).filter(Boolean).join(', ')) || null;
+    const content = clean(decodeHtml(job.content || '').replace(/<[^>]+>/g, ' '));
+    const pay = content.match(/(?:\\$|USD\\s*)\\s*[\\d,.]+(?:\\s*(?:-?\\s*to\\s*-?|[-–])\\s*(?:\\$|USD\\s*)?\\s*[\\d,.]+)?\\s*(?:per|\\/)\\s*(?:hour|hr|month|task)/i)?.[0] || null;
+    const departments = Array.isArray(job.departments) ? job.departments.map((department) => department.name).filter(Boolean) : [];
+    const sourceUrl = 'https://job-boards.eu.greenhouse.io/agency/jobs/' + encodeURIComponent(job.id);
+    return {
+      project_name: clean(job.title),
+      task_type: departments.join(', ') || null,
+      language: clean(job.language) || null,
+      country: rawLocation,
+      raw_location: rawLocation,
+      country_codes: extractCountryCodes(rawLocation),
+      pay,
+      source_url: sourceUrl,
+    };
+  }).filter((item) => item.project_name && item.source_url);
+
+  if (!items.length) throw new Error('Greenhouse API tidak menghasilkan listing Meridial');
+  await savePlatform('Meridial', items);
+  console.log('Meridial: ' + items.length + ' listing disimpan dari Greenhouse Job Board API');
+}
+
 async function scrapeRex() {
   const payload = await getJson('https://www.rex.zone/open-opportunities/_payload.json');
   const cache = new Map();
@@ -243,6 +271,7 @@ async function run(platform, scrape) {
 
 await run('micro1', scrapeMicro1);
 await run('RemoExperts', scrapeRex);
+await run('Meridial', scrapeMeridial);
 await run('SME Careers', scrapeSme);
 await run('CACTUS', scrapeCactus);
 
